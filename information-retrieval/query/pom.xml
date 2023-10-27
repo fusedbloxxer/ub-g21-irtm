@@ -42,7 +42,7 @@
         <version>3.1.0</version>
         <configuration>
           <skip>false</skip>
-          <mainClass>unibuc.fmi.App</mainClass>
+          <mainClass>${project.parent.groupId}.App</mainClass>
           <commandlineArgs>--path ./test</commandlineArgs>
         </configuration>
       </plugin>
@@ -54,7 +54,7 @@
           <archive>
             <manifest>
               <addClasspath>true</addClasspath>
-              <mainClass>unibuc.fmi.App</mainClass>
+              <mainClass>${project.parent.groupId}.App</mainClass>
             </manifest>
           </archive>
         </configuration>
