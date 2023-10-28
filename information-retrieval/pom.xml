@@ -110,18 +110,26 @@
           <version>3.5.1</version>
           <executions>
             <execution>
+              <id>build-jar</id>
               <phase>package</phase>
               <goals>
                 <goal>shade</goal>
               </goals>
               <configuration>
-                <outputDirectory>${outputPath}</outputDirectory>
+                <promoteTransitiveDependencies>false</promoteTransitiveDependencies>
                 <shadedArtifactAttached>true</shadedArtifactAttached>
                 <shadedClassifierName>shade</shadedClassifierName>
+                <outputDirectory>${outputPath}</outputDirectory>
                 <minimizeJar>true</minimizeJar>
                 <entryPoints>
                   <entryPoint>${mainEntry}</entryPoint>
                 </entryPoints>
+                <artifactSet>
+                  <excludes>
+                    <exclude>org.apache.commons:*</exclude>
+                    <exclude>org.apache.lucene:*</exclude>
+                  </excludes>
+                </artifactSet>
               </configuration>
             </execution>
           </executions>

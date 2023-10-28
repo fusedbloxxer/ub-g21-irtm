@@ -55,7 +55,7 @@
         <artifactId>exec-maven-plugin</artifactId>
         <configuration>
           <skip>false</skip>
-          <commandlineArgs></commandlineArgs>
+          <commandlineArgs>Computer</commandlineArgs>
         </configuration>
       </plugin>
 
@@ -69,13 +69,6 @@
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-shade-plugin</artifactId>
-        <configuration>
-          <artifactSet>
-            <excludes>
-              <exclude>org.apache.lucene:*</exclude>
-            </excludes>
-          </artifactSet>
-        </configuration>
       </plugin>
 
       <!-- https://mvnrepository.com/artifact/org.apache.maven.plugins/maven-dependency-plugin -->

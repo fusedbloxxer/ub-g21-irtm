@@ -20,8 +20,20 @@ import org.apache.lucene.search.TopDocs;
 import org.apache.lucene.store.Directory;
 import org.apache.lucene.store.ByteBuffersDirectory;
 
+import org.apache.commons.collections4.MapIterator;
+import org.apache.commons.collections4.map.HashedMap;
+
 public class App {
     public static void main(String[] args) throws IOException, ParseException {
+        HashedMap map = new HashedMap();
+        map.put("andrei", "are");
+        MapIterator it = map.mapIterator();
+        while (it.hasNext()) {
+            Object key = it.next();
+            Object value = it.getValue();
+            System.out.println(key + " " + value);
+        }
+
         // 0. Specify the analyzer for tokenizing text.
         // The same analyzer should be used for indexing and searching
         StandardAnalyzer analyzer = new StandardAnalyzer();
