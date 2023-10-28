@@ -21,7 +21,7 @@
     <mainEntry>${project.groupId}.App</mainEntry>
 
     <!-- The output path for the final JARs. -->
-    <outputPath>${project.build.directory}</outputPath>
+    <outputPath>${project.build.directory}/../../build</outputPath>
 
     <!-- Other properties. -->
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
@@ -95,10 +95,36 @@
               <manifest>
                 <addClasspath>true</addClasspath>
                 <mainClass>${mainEntry}</mainClass>
-                <classpathPrefix>libs/</classpathPrefix>
+                <classpathPrefix>libs</classpathPrefix>
               </manifest>
             </archive>
           </configuration>
+        </plugin>
+
+        <!-- Groups the Project + Dependencies into an Uber-JAR. -->
+        <!-- Allows inclusion & exclusion of specific dependencies. -->
+        <!-- https://mvnrepository.com/artifact/org.apache.maven.plugins/maven-shade-plugin -->
+        <plugin>
+          <groupId>org.apache.maven.plugins</groupId>
+          <artifactId>maven-shade-plugin</artifactId>
+          <version>3.5.1</version>
+          <executions>
+            <execution>
+              <phase>package</phase>
+              <goals>
+                <goal>shade</goal>
+              </goals>
+              <configuration>
+                <outputDirectory>${outputPath}</outputDirectory>
+                <shadedArtifactAttached>true</shadedArtifactAttached>
+                <shadedClassifierName>shade</shadedClassifierName>
+                <minimizeJar>true</minimizeJar>
+                <entryPoints>
+                  <entryPoint>${mainEntry}</entryPoint>
+                </entryPoints>
+              </configuration>
+            </execution>
+          </executions>
         </plugin>
 
         <!-- Include large dependencies as separate JARs. -->
@@ -116,31 +142,6 @@
               </goals>
               <configuration>
                 <outputDirectory>${outputPath}/libs</outputDirectory>
-              </configuration>
-            </execution>
-          </executions>
-        </plugin>
-
-        <!-- Groups the Project + Dependencies into an Uber-JAR. -->
-        <!-- Allows inclusion & exclusion of specific dependencies. -->
-        <!-- https://mvnrepository.com/artifact/org.apache.maven.plugins/maven-shade-plugin -->
-        <plugin>
-          <groupId>org.apache.maven.plugins</groupId>
-          <artifactId>maven-shade-plugin</artifactId>
-          <version>3.5.1</version>
-          <executions>
-            <execution>
-              <phase>package</phase>
-              <goals>
-                <goal>shade</goal>
-              </goals>
-              <configuration>
-                <shadedArtifactAttached>true</shadedArtifactAttached>
-                <shadedClassifierName>shade</shadedClassifierName>
-                <minimizeJar>true</minimizeJar>
-                <entryPoints>
-                  <entryPoint>${mainEntry}</entryPoint>
-                </entryPoints>
               </configuration>
             </execution>
           </executions>
