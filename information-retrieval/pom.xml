@@ -13,7 +13,18 @@
   <url>http://maven.apache.org</url>
 
   <properties>
+    <!-- Properties are inherited in children modules. -->
+    <!-- https://maven.apache.org/guides/introduction/introduction-to-the-pom.html#properties -->
     <maven.compiler.release>17</maven.compiler.release>
+
+    <!-- Common MainClass used in submodules for entrypoint of execution. -->
+    <mainEntry>${project.groupId}.App</mainEntry>
+
+    <!-- The output path for the final JARs. -->
+    <outputPath>${project.build.directory}</outputPath>
+
+    <!-- Other properties. -->
+    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
   </properties>
 
   <modules>
@@ -22,7 +33,29 @@
     <module>query</module>
   </modules>
 
+  <dependencyManagement>
+    <!-- Optionally test the project. -->
+    <!-- https://mvnrepository.com/artifact/junit/junit -->
+    <dependencies>
+      <dependency>
+        <groupId>junit</groupId>
+        <artifactId>junit</artifactId>
+        <version>4.13.2</version>
+        <scope>test</scope>
+      </dependency>
+    </dependencies>
+  </dependencyManagement>
+
   <build>
+    <resources>
+      <resource>
+        <directory>src/main/java</directory>
+        <includes>
+          <include>**/*.java</include>
+        </includes>
+      </resource>
+    </resources>
+
     <!-- Inherited across submodules. -->
     <plugins>
       <!-- https://mvnrepository.com/artifact/org.apache.maven.plugins/maven-compiler-plugin -->
@@ -36,6 +69,7 @@
     <!-- Inherit these settings through opt-in across submodules. -->
     <pluginManagement>
       <plugins>
+        <!-- Useful to run exec:java; Children submodules may use <skip>false</skip>. -->
         <!-- https://mvnrepository.com/artifact/org.codehaus.mojo/exec-maven-plugin -->
         <!-- https://stackoverflow.com/questions/3459928 -->
         <plugin>
@@ -44,15 +78,52 @@
           <version>3.1.0</version>
           <configuration>
             <skip>true</skip>
-            <mainClass>none</mainClass>
+            <mainClass>${mainEntry}</mainClass>
           </configuration>
         </plugin>
+
+        <!-- This plugin provides the capability to build and sign JARs. -->
+        <!-- But it just compiles the java files under `src/main/java` and `src/main/resources/`. -->
+        <!-- It doesn't include the dependencies JAR files. -->
         <!-- https://mvnrepository.com/artifact/org.apache.maven.plugins/maven-jar-plugin -->
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-jar-plugin</artifactId>
           <version>3.3.0</version>
+          <configuration>
+            <archive>
+              <manifest>
+                <addClasspath>true</addClasspath>
+                <mainClass>${mainEntry}</mainClass>
+                <classpathPrefix>libs/</classpathPrefix>
+              </manifest>
+            </archive>
+          </configuration>
         </plugin>
+
+        <!-- Include large dependencies as separate JARs. -->
+        <!-- https://mvnrepository.com/artifact/org.apache.maven.plugins/maven-dependency-plugin -->
+        <plugin>
+          <groupId>org.apache.maven.plugins</groupId>
+          <artifactId>maven-dependency-plugin</artifactId>
+          <version>3.6.1</version>
+          <executions>
+            <execution>
+              <id>copy-dependencies</id>
+              <phase>package</phase>
+              <goals>
+                <goal>copy-dependencies</goal>
+              </goals>
+              <configuration>
+                <outputDirectory>${outputPath}/libs</outputDirectory>
+              </configuration>
+            </execution>
+          </executions>
+        </plugin>
+
+        <!-- Groups the Project + Dependencies into an Uber-JAR. -->
+        <!-- Allows inclusion & exclusion of specific dependencies. -->
+        <!-- https://mvnrepository.com/artifact/org.apache.maven.plugins/maven-shade-plugin -->
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-shade-plugin</artifactId>
@@ -63,6 +134,14 @@
               <goals>
                 <goal>shade</goal>
               </goals>
+              <configuration>
+                <shadedArtifactAttached>true</shadedArtifactAttached>
+                <shadedClassifierName>shade</shadedClassifierName>
+                <minimizeJar>true</minimizeJar>
+                <entryPoints>
+                  <entryPoint>${mainEntry}</entryPoint>
+                </entryPoints>
+              </configuration>
             </execution>
           </executions>
         </plugin>

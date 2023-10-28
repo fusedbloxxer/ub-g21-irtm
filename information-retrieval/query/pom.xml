@@ -12,24 +12,38 @@
     <version>1.0-SNAPSHOT</version>
   </parent>
 
-  <groupId>unibuc.fmi</groupId>
+  <name>query</name>
   <artifactId>query</artifactId>
   <version>1.0-SNAPSHOT</version>
-
-  <name>query</name>
   <url>http://maven.apache.org</url>
 
   <dependencies>
+    <!-- Need the common functionalities found in the core submodule. -->
     <dependency>
-      <groupId>${project.parent.groupId}</groupId>
+      <groupId>${project.groupId}</groupId>
       <artifactId>core</artifactId>
       <version>1.0-SNAPSHOT</version>
     </dependency>
+
+    <!-- https://mvnrepository.com/artifact/junit/junit -->
     <dependency>
       <groupId>junit</groupId>
       <artifactId>junit</artifactId>
-      <version>3.8.1</version>
       <scope>test</scope>
+    </dependency>
+
+    <!-- https://mvnrepository.com/artifact/org.apache.lucene/lucene-core -->
+    <dependency>
+      <groupId>org.apache.lucene</groupId>
+      <artifactId>lucene-core</artifactId>
+      <version>9.8.0</version>
+    </dependency>
+
+    <!-- https://mvnrepository.com/artifact/org.apache.lucene/lucene-queryparser -->
+    <dependency>
+      <groupId>org.apache.lucene</groupId>
+      <artifactId>lucene-queryparser</artifactId>
+      <version>9.8.0</version>
     </dependency>
   </dependencies>
 
@@ -39,30 +53,43 @@
       <plugin>
         <groupId>org.codehaus.mojo</groupId>
         <artifactId>exec-maven-plugin</artifactId>
-        <version>3.1.0</version>
         <configuration>
           <skip>false</skip>
-          <mainClass>${project.parent.groupId}.App</mainClass>
-          <commandlineArgs>--path ./test</commandlineArgs>
+          <commandlineArgs></commandlineArgs>
         </configuration>
       </plugin>
+
+      <!-- https://mvnrepository.com/artifact/org.apache.maven.plugins/maven-jar-plugin -->
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-jar-plugin</artifactId>
-        <version>3.3.0</version>
-        <configuration>
-          <archive>
-            <manifest>
-              <addClasspath>true</addClasspath>
-              <mainClass>${project.parent.groupId}.App</mainClass>
-            </manifest>
-          </archive>
-        </configuration>
       </plugin>
+
+      <!-- https://mvnrepository.com/artifact/org.apache.maven.plugins/maven-shade-plugin -->
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-shade-plugin</artifactId>
-        <version>3.5.1</version>
+        <configuration>
+          <artifactSet>
+            <excludes>
+              <exclude>org.apache.lucene:*</exclude>
+            </excludes>
+          </artifactSet>
+        </configuration>
+      </plugin>
+
+      <!-- https://mvnrepository.com/artifact/org.apache.maven.plugins/maven-dependency-plugin -->
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-dependency-plugin</artifactId>
+        <executions>
+          <execution>
+            <id>copy-dependencies</id>
+            <configuration>
+              <includeGroupIds>org.apache.lucene</includeGroupIds>
+            </configuration>
+          </execution>
+        </executions>
       </plugin>
     </plugins>
   </build>
