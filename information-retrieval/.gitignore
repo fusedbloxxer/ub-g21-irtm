@@ -1,6 +1,11 @@
 # Created by https://www.toptal.com/developers/gitignore/api/maven,java,linux,visualstudiocode,python,git
 # Edit at https://www.toptal.com/developers/gitignore?templates=maven,java,linux,visualstudiocode,python,git
 
+# Custom #
+test/**/*.pdf
+test/**/*.txt
+test/**/*.docx
+
 ### Git ###
 # Created by git for backups. To disable backups in Git:
 # $ git config --global mergetool.keepBackup false

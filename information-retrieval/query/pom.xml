@@ -45,6 +45,13 @@
       <artifactId>lucene-queryparser</artifactId>
       <version>9.8.0</version>
     </dependency>
+
+    <!-- https://mvnrepository.com/artifact/info.picocli/picocli -->
+    <dependency>
+      <groupId>info.picocli</groupId>
+      <artifactId>picocli</artifactId>
+      <version>4.7.5</version>
+    </dependency>
   </dependencies>
 
   <build>
@@ -55,7 +62,7 @@
         <artifactId>exec-maven-plugin</artifactId>
         <configuration>
           <skip>false</skip>
-          <commandlineArgs>Computer</commandlineArgs>
+          <commandlineArgs></commandlineArgs>
         </configuration>
       </plugin>
 

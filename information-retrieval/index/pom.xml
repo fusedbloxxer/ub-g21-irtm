@@ -38,6 +38,13 @@
       <artifactId>lucene-core</artifactId>
       <version>9.8.0</version>
     </dependency>
+
+    <!-- https://mvnrepository.com/artifact/info.picocli/picocli -->
+    <dependency>
+      <groupId>info.picocli</groupId>
+      <artifactId>picocli</artifactId>
+      <version>4.7.5</version>
+    </dependency>
   </dependencies>
 
   <build>
@@ -48,6 +55,7 @@
         <artifactId>exec-maven-plugin</artifactId>
         <configuration>
           <skip>false</skip>
+          <commandlineArgs></commandlineArgs>
         </configuration>
       </plugin>
 
@@ -72,6 +80,7 @@
             <id>copy-dependencies</id>
             <configuration>
               <includeGroupIds>org.apache.lucene</includeGroupIds>
+              <includeGroupIds>info.picocli</includeGroupIds>
             </configuration>
           </execution>
         </executions>
