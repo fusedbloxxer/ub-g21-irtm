@@ -24,6 +24,13 @@
       <artifactId>junit</artifactId>
       <scope>test</scope>
     </dependency>
+
+    <!-- https://mvnrepository.com/artifact/org.apache.lucene/lucene-analysis-common -->
+    <dependency>
+      <groupId>org.apache.lucene</groupId>
+      <artifactId>lucene-analysis-common</artifactId>
+      <version>9.8.0</version>
+    </dependency>
   </dependencies>
 
   <build>

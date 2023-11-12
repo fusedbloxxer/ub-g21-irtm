@@ -1,7 +1,5 @@
 package unibuc.fmi.parse;
 
-import java.io.Reader;
-import java.io.StringReader;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 
@@ -15,19 +13,19 @@ public class TikaContent {
     private final MediaType mediaType;
     private final Metadata metadata;
     private final boolean hasError;
-    private final Reader reader;
+    private final String text;
 
     public TikaContent(Path path, ContentHandler handler, Metadata metadata, MediaType mediaType) {
         this.hasError = false;
         this.metadata = metadata;
         this.mediaType = mediaType;
-        this.reader = new StringReader(handler.toString());
+        this.text = handler.toString();
         this.metadata.set(METADATA_FILENAME, path.getFileName().toString());
         this.metadata.set(METADATA_FILEPATH, path.toAbsolutePath().toString());
     }
 
-    public Reader getReader() {
-        return reader;
+    public String getText() {
+        return text;
     }
 
     public Metadata getMetadata() {

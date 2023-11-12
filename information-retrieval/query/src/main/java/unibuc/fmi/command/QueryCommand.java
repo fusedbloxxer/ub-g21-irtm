@@ -5,7 +5,7 @@ import java.nio.file.Path;
 import java.util.concurrent.Callable;
 
 import org.apache.lucene.analysis.Analyzer;
-import org.apache.lucene.analysis.standard.StandardAnalyzer;
+import org.apache.lucene.analysis.ro.RomanianAnalyzer;
 import org.apache.lucene.document.Document;
 import org.apache.lucene.index.DirectoryReader;
 import org.apache.lucene.index.IndexReader;
@@ -20,8 +20,6 @@ import org.apache.lucene.store.FSDirectory;
 
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Parameters;
-import unibuc.fmi.analyze.RoTextAnalyzer;
-import unibuc.fmi.common.Utils;
 
 @Command(name = "query", version = "1.0.0", mixinStandardHelpOptions = true)
 public class QueryCommand implements Callable<Integer> {
@@ -33,16 +31,15 @@ public class QueryCommand implements Callable<Integer> {
 
     @Override
     public Integer call() throws IOException, ParseException {
-        try (Directory directory = FSDirectory.open(indexPath);
-                IndexReader indexReader = DirectoryReader.open(directory)) {
-            IndexSearcher searcher = new IndexSearcher(indexReader);
-            Analyzer analyzer = new StandardAnalyzer();
+        try (Directory dir = FSDirectory.open(indexPath); IndexReader reader = DirectoryReader.open(dir)) {
+            Analyzer analyzer = new RomanianAnalyzer();
+            IndexSearcher searcher = new IndexSearcher(reader);
 
             QueryParser queryParser = new QueryParser("content", analyzer);
             Query query = queryParser.parse(queryString);
 
             TopDocs docs = searcher.search(query, 10);
-            StoredFields storedFields = indexReader.storedFields();
+            StoredFields storedFields = reader.storedFields();
             System.out.println(docs.totalHits + ":" + query.toString());
 
             for (var scoreDoc : docs.scoreDocs) {

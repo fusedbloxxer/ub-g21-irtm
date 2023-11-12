@@ -13,7 +13,7 @@ import org.apache.tika.mime.MediaType;
 import org.apache.tika.parser.ParseContext;
 import org.apache.tika.sax.BodyContentHandler;
 
-import unibuc.fmi.common.Constants;
+import unibuc.fmi.common.Utils;
 
 import org.apache.tika.exception.TikaException;
 import org.apache.tika.parser.AutoDetectParser;
@@ -42,7 +42,7 @@ public class TikaParser {
             parser.parse(bs, handler, metadata, parseContext);
             return Optional.of(new TikaContent(path, handler, metadata, mType));
         } catch (Exception e) {
-            if (Constants.IsDebug) {
+            if (Utils.IsDebug) {
                 System.err.println("Tika cannot parse " + path.toAbsolutePath());
                 System.err.println("Error: " + e.getMessage());
             }

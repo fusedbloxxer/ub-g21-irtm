@@ -13,7 +13,6 @@ import unibuc.fmi.file.PathSearch;
 import unibuc.fmi.file.PathSearch.PathSearchOptions;
 import unibuc.fmi.indexer.DocumentIndexer;
 import unibuc.fmi.parse.TikaParser;
-import unibuc.fmi.common.Constants;
 import unibuc.fmi.common.Utils;
 
 @Command(name = "index", version = "1.0.0", mixinStandardHelpOptions = true, exitCodeList = {})
@@ -31,8 +30,8 @@ public class IndexCommand implements Callable<Integer> {
     boolean debug = false;
 
     public Integer call() throws Exception {
-        // Optionally enable inspection mode
-        Constants.IsDebug = debug;
+        // Leverage CLI options to setup execution
+        setup();
 
         // Obtain the paths to the files of interest recursively
         var filepaths = PathSearch.from(dataPath, new PathSearchOptions(supportedFileTypes));
@@ -53,23 +52,29 @@ public class IndexCommand implements Callable<Integer> {
 
             // Show content
             var content = raw.get();
-            System.out.println(content.getFilename());
+            System.out.println("FILENAME: " + content.getFilename());
+            System.out.println("MEDIA_TYPE: " + content.getMediaType());
 
             // Index content
             docIndexer.addDoc(content);
 
             // Debug
-            // TokenStream ts = docIndexer
-            //         .getIndexWriter()
-            //         .getAnalyzer()
-            //         .tokenStream("content", content.getReader());
-            // CharTermAttribute termAtt = ts.addAttribute(CharTermAttribute.class);
+            TokenStream ts = docIndexer
+                    .getIndexWriter()
+                    .getAnalyzer()
+                    .tokenStream("content", content.getText());
+            CharTermAttribute termAtt = ts.addAttribute(CharTermAttribute.class);
+            System.out.println("TOKENS:");
 
-            // // Iterate and show terms
-            // ts.reset();
-            // while (ts.incrementToken()) {
-            //     System.out.print("[" + termAtt.toString() + "]");
-            // }
+            // Iterate and show terms
+            ts.reset();
+            while (ts.incrementToken()) {
+                System.out.print("[" + termAtt.toString() + "]");
+            }
+            System.out.println();
+            ts.end();
+            ts.close();
+            System.out.println("------------------------------");
         }
 
         // Commit the changes
@@ -78,5 +83,10 @@ public class IndexCommand implements Callable<Integer> {
         // Close the indexer
         docIndexer.close();
         return 0;
+    }
+
+    private void setup() {
+        // Optionally enable inspection mode
+        Utils.IsDebug = debug;
     }
 }
