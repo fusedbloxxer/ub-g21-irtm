@@ -32,18 +32,40 @@
       <scope>test</scope>
     </dependency>
 
-    <!-- https://mvnrepository.com/artifact/org.apache.lucene/lucene-core -->
-    <dependency>
-      <groupId>org.apache.lucene</groupId>
-      <artifactId>lucene-core</artifactId>
-      <version>9.8.0</version>
-    </dependency>
-
     <!-- https://mvnrepository.com/artifact/info.picocli/picocli -->
     <dependency>
       <groupId>info.picocli</groupId>
       <artifactId>picocli</artifactId>
       <version>4.7.5</version>
+    </dependency>
+
+    <!-- https://mvnrepository.com/artifact/org.apache.tika/tika-core -->
+    <dependency>
+      <groupId>org.apache.tika</groupId>
+      <artifactId>tika-core</artifactId>
+      <version>2.9.1</version>
+    </dependency>
+
+    <!-- https://mvnrepository.com/artifact/org.apache.tika/tika-parsers-standard-package -->
+    <dependency>
+      <groupId>org.apache.tika</groupId>
+      <artifactId>tika-parsers-standard-package</artifactId>
+      <version>2.9.1</version>
+    </dependency>
+
+    <!-- https://mvnrepository.com/artifact/org.apache.logging.log4j/log4j-slf4j2-impl -->
+    <dependency>
+      <groupId>org.apache.logging.log4j</groupId>
+      <artifactId>log4j-slf4j2-impl</artifactId>
+      <version>2.21.1</version>
+    </dependency>
+
+    <!-- Dependency needed to parse PDFs using Apache Tika -->
+    <!-- https://jar-download.com/artifacts/org.apache.tuscany.sca.aggregation/tuscany-binding-ws-runtime-axis2-aggregation/2.0.1/source-code/org/apache/xpath/jaxp/XPathFactoryImpl.java -->
+    <dependency>
+      <groupId>org.apache.tuscany.sca.aggregation</groupId>
+      <artifactId>tuscany-binding-ws-runtime-axis2-aggregation</artifactId>
+      <version>2.0.1</version>
     </dependency>
   </dependencies>
 
@@ -79,7 +101,7 @@
           <execution>
             <id>copy-dependencies</id>
             <configuration>
-              <includeGroupIds>org.apache.lucene</includeGroupIds>
+              <includeGroupIds>org.apache.tika</includeGroupIds>
               <includeGroupIds>info.picocli</includeGroupIds>
             </configuration>
           </execution>

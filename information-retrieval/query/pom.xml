@@ -32,13 +32,6 @@
       <scope>test</scope>
     </dependency>
 
-    <!-- https://mvnrepository.com/artifact/org.apache.lucene/lucene-core -->
-    <dependency>
-      <groupId>org.apache.lucene</groupId>
-      <artifactId>lucene-core</artifactId>
-      <version>9.8.0</version>
-    </dependency>
-
     <!-- https://mvnrepository.com/artifact/org.apache.lucene/lucene-queryparser -->
     <dependency>
       <groupId>org.apache.lucene</groupId>
@@ -86,7 +79,6 @@
           <execution>
             <id>copy-dependencies</id>
             <configuration>
-              <includeGroupIds>org.apache.lucene</includeGroupIds>
             </configuration>
           </execution>
         </executions>

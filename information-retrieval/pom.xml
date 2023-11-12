@@ -33,6 +33,15 @@
     <module>query</module>
   </modules>
 
+  <dependencies>
+    <!-- https://mvnrepository.com/artifact/org.apache.lucene/lucene-core -->
+    <dependency>
+      <groupId>org.apache.lucene</groupId>
+      <artifactId>lucene-core</artifactId>
+      <version>9.8.0</version>
+    </dependency>
+  </dependencies>
+
   <dependencyManagement>
     <!-- Optionally test the project. -->
     <!-- https://mvnrepository.com/artifact/junit/junit -->
@@ -139,6 +148,7 @@
                 <artifactSet>
                   <excludes>
                     <exclude>info.picocli:*</exclude>
+                    <exclude>org.apache.tika:*</exclude>
                     <exclude>org.apache.lucene:*</exclude>
                   </excludes>
                 </artifactSet>
@@ -162,6 +172,7 @@
               </goals>
               <configuration>
                 <outputDirectory>${outputPath}/libs</outputDirectory>
+                <includeGroupIds>org.apache.lucene</includeGroupIds>
               </configuration>
             </execution>
           </executions>
