@@ -2,6 +2,7 @@
 # Edit at https://www.toptal.com/developers/gitignore?templates=maven,java,linux,visualstudiocode,python,git
 
 # Custom #
+**/.index/
 test/**/*.pdf
 test/**/*.txt
 test/**/*.docx

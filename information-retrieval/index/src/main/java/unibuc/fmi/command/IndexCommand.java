@@ -20,10 +20,12 @@ public class IndexCommand implements Callable<Integer> {
     @Parameters(index = "0", arity = "1", paramLabel = "DATAPATH", description = "the path to a regular or directory file")
     Path dataPath;
 
-    @Parameters(index = "1", arity = "0..1", paramLabel = "INDEXPATH", defaultValue = ".index", description = "the path to where the index will be saved (default: ${DEFAULT-VALUE})")
+    @Option(names = { "-i",
+            "--index-path" }, paramLabel = "INDEXPATH", defaultValue = ".index", description = "the path to where the index will be saved (default: ${DEFAULT-VALUE})")
     Path indexPath;
 
-    @Option(names = "--file-type", paramLabel = "FILETYPE", defaultValue = "txt,pdf,docx", split = ",", description = "supported filetype formats (default: ${DEFAULT-VALUE})")
+    @Option(names = { "-f",
+            "--file-type" }, paramLabel = "FILETYPE", defaultValue = "txt,pdf,docx", split = ",", description = "supported filetype formats (default: ${DEFAULT-VALUE})")
     String[] supportedFileTypes;
 
     @Option(names = { "--debug" }, negatable = true, description = "enable debugging mode (default: ${DEFAULT-VALUE})")

@@ -13,10 +13,9 @@ import org.apache.lucene.index.IndexWriterConfig;
 import org.apache.lucene.store.Directory;
 import org.apache.lucene.store.FSDirectory;
 import org.apache.lucene.util.Version;
-import org.apache.lucene.analysis.ro.RomanianAnalyzer;
 
+import unibuc.fmi.analyze.RoTextAnalyzer;
 import unibuc.fmi.parse.TikaContent;
-import unibuc.fmi.common.Utils;
 
 public class DocumentIndexer implements AutoCloseable {
     private final IndexWriter indexWriter;
@@ -26,7 +25,7 @@ public class DocumentIndexer implements AutoCloseable {
         Directory directory = FSDirectory.open(indexPath);
 
         // User per-field analyzer
-        Analyzer analyzer = new RomanianAnalyzer();
+        Analyzer analyzer = new RoTextAnalyzer(version);
 
         // Open the index in CREATE mode to override previous segments
         IndexWriterConfig iwConfig = new IndexWriterConfig(analyzer)
