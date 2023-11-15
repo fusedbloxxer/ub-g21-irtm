@@ -15,6 +15,7 @@ import org.apache.lucene.store.FSDirectory;
 import org.apache.lucene.util.Version;
 
 import unibuc.fmi.analyze.RoTextAnalyzer;
+import unibuc.fmi.document.DocumentFields;
 import unibuc.fmi.parse.TikaContent;
 
 public class DocumentIndexer implements AutoCloseable {
@@ -37,12 +38,14 @@ public class DocumentIndexer implements AutoCloseable {
     }
 
     public void addDoc(TikaContent content) throws IOException {
+        // Creat a new document to add
         Document document = new Document();
 
-        document.add(new TextField("content", new StringReader(content.getText())));
+        // Add fields
+        document.add(new TextField(DocumentFields.FIELD_CONTENT, new StringReader(content.getText())));
+        document.add(new StoredField(DocumentFields.FIELD_FILENAME, content.getFilename()));
 
-        document.add(new StoredField("filename", content.getFilename()));
-
+        // Add document with populated fields
         indexWriter.addDocument(document);
     }
 

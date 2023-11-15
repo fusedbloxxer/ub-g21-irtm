@@ -61,7 +61,8 @@
     </dependency>
 
     <!-- Dependency needed to parse PDFs using Apache Tika -->
-    <!-- https://jar-download.com/artifacts/org.apache.tuscany.sca.aggregation/tuscany-binding-ws-runtime-axis2-aggregation/2.0.1/source-code/org/apache/xpath/jaxp/XPathFactoryImpl.java -->
+    <!--
+    https://jar-download.com/artifacts/org.apache.tuscany.sca.aggregation/tuscany-binding-ws-runtime-axis2-aggregation/2.0.1/source-code/org/apache/xpath/jaxp/XPathFactoryImpl.java -->
     <dependency>
       <groupId>org.apache.tuscany.sca.aggregation</groupId>
       <artifactId>tuscany-binding-ws-runtime-axis2-aggregation</artifactId>
@@ -77,7 +78,8 @@
         <artifactId>exec-maven-plugin</artifactId>
         <configuration>
           <skip>false</skip>
-          <commandlineArgs></commandlineArgs>
+          <commandlineArgs>
+          </commandlineArgs>
         </configuration>
       </plugin>
 

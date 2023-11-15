@@ -3,8 +3,7 @@ package unibuc.fmi.command;
 import java.nio.file.Path;
 import java.util.concurrent.Callable;
 
-import org.apache.lucene.analysis.TokenStream;
-import org.apache.lucene.analysis.tokenattributes.CharTermAttribute;
+import org.apache.lucene.document.TextField;
 
 import picocli.CommandLine.Parameters;
 import picocli.CommandLine.Command;
@@ -14,6 +13,7 @@ import unibuc.fmi.file.PathSearch.PathSearchOptions;
 import unibuc.fmi.indexer.DocumentIndexer;
 import unibuc.fmi.parse.TikaParser;
 import unibuc.fmi.common.Utils;
+import unibuc.fmi.document.DocumentFields;
 
 @Command(name = "index", version = "1.0.0", mixinStandardHelpOptions = true, exitCodeList = {})
 public class IndexCommand implements Callable<Integer> {
@@ -25,8 +25,8 @@ public class IndexCommand implements Callable<Integer> {
     Path indexPath;
 
     @Option(names = { "-f",
-            "--file-type" }, paramLabel = "FILETYPE", defaultValue = "txt,pdf,docx", split = ",", description = "supported filetype formats (default: ${DEFAULT-VALUE})")
-    String[] supportedFileTypes;
+            "--file-type" }, paramLabel = "FILETYPE", split = ",", description = "supported filetype formats")
+    String[] supportedFileTypes = new String[] {};
 
     @Option(names = { "--debug" }, negatable = true, description = "enable debugging mode (default: ${DEFAULT-VALUE})")
     boolean debug = false;
@@ -56,27 +56,11 @@ public class IndexCommand implements Callable<Integer> {
             var content = raw.get();
             System.out.println("FILENAME: " + content.getFilename());
             System.out.println("MEDIA_TYPE: " + content.getMediaType());
+            Utils.debugAnalyzer(docIndexer.getIndexWriter().getAnalyzer(), DocumentFields.FIELD_CONTENT,
+                    content.getText());
 
             // Index content
             docIndexer.addDoc(content);
-
-            // Debug
-            TokenStream ts = docIndexer
-                    .getIndexWriter()
-                    .getAnalyzer()
-                    .tokenStream("content", content.getText());
-            CharTermAttribute termAtt = ts.addAttribute(CharTermAttribute.class);
-            System.out.println("TOKENS:");
-
-            // Iterate and show terms
-            ts.reset();
-            while (ts.incrementToken()) {
-                System.out.print("[" + termAtt.toString() + "]");
-            }
-            System.out.println();
-            ts.end();
-            ts.close();
-            System.out.println("------------------------------");
         }
 
         // Commit the changes

@@ -15,6 +15,10 @@
             "name": "Debug Index",
             "request": "launch",
             "mainClass": "unibuc.fmi.App",
+            "args": [
+                "test/",
+                "--debug",
+            ],
             "projectName": "index"
         },
         {
