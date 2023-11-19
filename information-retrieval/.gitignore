@@ -5,6 +5,7 @@
 **/.index/
 test/**/*.pdf
 test/**/*.txt
+test/**/*.doc
 test/**/*.docx
 
 ### Git ###

@@ -29,7 +29,7 @@ public class PathSearch {
             throw new AccessDeniedException(path.toAbsolutePath().toString());
         }
 
-        PathFilter pathFilter = new ExtensionPathFilter(options.fileExtensions);
+        Filter<Path> pathFilter = new PathSuffixFilter(options.fileExtensions);
         Predicate<Path> isValidFile = x -> Files.isReadable(x) && Files.isRegularFile(x);
         Predicate<Path> isExtAllowed = x -> pathFilter.accept(x);
         Predicate<Path> isAllowed = isValidFile.and(isExtAllowed);

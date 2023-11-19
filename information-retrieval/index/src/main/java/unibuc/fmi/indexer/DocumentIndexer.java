@@ -4,18 +4,19 @@ import java.io.IOException;
 import java.io.StringReader;
 import java.nio.file.Path;
 
-import org.apache.lucene.analysis.Analyzer;
-import org.apache.lucene.document.Document;
+import org.apache.lucene.index.IndexWriterConfig;
 import org.apache.lucene.document.StoredField;
 import org.apache.lucene.document.TextField;
+import org.apache.lucene.analysis.Analyzer;
+import org.apache.lucene.document.Document;
 import org.apache.lucene.index.IndexWriter;
-import org.apache.lucene.index.IndexWriterConfig;
-import org.apache.lucene.store.Directory;
 import org.apache.lucene.store.FSDirectory;
+import org.apache.lucene.store.Directory;
 import org.apache.lucene.util.Version;
 
-import unibuc.fmi.analyze.RoTextAnalyzer;
+import unibuc.fmi.analyze.RoTextAnalyzer.AnalyzerMode;
 import unibuc.fmi.document.DocumentFields;
+import unibuc.fmi.analyze.RoTextAnalyzer;
 import unibuc.fmi.parse.TikaContent;
 
 public class DocumentIndexer implements AutoCloseable {
@@ -26,7 +27,7 @@ public class DocumentIndexer implements AutoCloseable {
         Directory directory = FSDirectory.open(indexPath);
 
         // User per-field analyzer
-        Analyzer analyzer = new RoTextAnalyzer(version);
+        Analyzer analyzer = new RoTextAnalyzer(AnalyzerMode.INDEXING);
 
         // Open the index in CREATE mode to override previous segments
         IndexWriterConfig iwConfig = new IndexWriterConfig(analyzer)
@@ -42,8 +43,9 @@ public class DocumentIndexer implements AutoCloseable {
         Document document = new Document();
 
         // Add fields
-        document.add(new TextField(DocumentFields.FIELD_CONTENT, new StringReader(content.getText())));
         document.add(new StoredField(DocumentFields.FIELD_FILENAME, content.getFilename()));
+        document.add(new StoredField(DocumentFields.FIELD_FILEPATH, content.getFilepath().toAbsolutePath().toString()));
+        document.add(new TextField(DocumentFields.FIELD_CONTENT, new StringReader(content.getText())));
 
         // Add document with populated fields
         indexWriter.addDocument(document);

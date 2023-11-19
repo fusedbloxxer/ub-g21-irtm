@@ -5,16 +5,14 @@ import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Path;
-import java.util.Arrays;
 import java.util.Optional;
 
+import org.apache.tika.mime.MediaType;
 import org.apache.tika.config.TikaConfig;
 import org.apache.tika.metadata.Metadata;
-import org.apache.tika.mime.MediaType;
 import org.apache.tika.parser.ParseContext;
 import org.apache.tika.sax.BodyContentHandler;
 
-import unibuc.fmi.common.DocumentTypes;
 import unibuc.fmi.common.Utils;
 
 import org.apache.tika.exception.TikaException;
@@ -35,6 +33,7 @@ public class TikaParser {
     }
 
     public Optional<TikaContent> parse(Path path) {
+        System.out.println(path);
         BodyContentHandler handler = new BodyContentHandler(TIKA_NO_CHAR_LIMIT);
         AutoDetectParser parser = new AutoDetectParser(config);
         Metadata metadata = new Metadata();
@@ -44,17 +43,9 @@ public class TikaParser {
         }
 
         try (FileInputStream fs = new FileInputStream(path.toFile()); InputStream bs = new BufferedInputStream(fs)) {
-            MediaType mType = parser.getDetector().detect(bs, metadata);
-
-            if (!isAllowedDocType(mType)) {
-                if (Utils.IsDebug) {
-                    System.out.println("[Debug] Document type is ignored: " + mType);
-                }
-                return Optional.empty();
-            }
-
+            MediaType mediaType = parser.getDetector().detect(bs, metadata);
             parser.parse(bs, handler, metadata, parseContext);
-            return Optional.of(new TikaContent(path, handler, metadata, mType));
+            return Optional.of(new TikaContent(path, handler, metadata, mediaType));
         } catch (Exception e) {
             if (Utils.IsDebug) {
                 System.err.println("[Debug] Tika cannot parse " + path.toAbsolutePath());
@@ -63,13 +54,5 @@ public class TikaParser {
 
             return Optional.empty();
         }
-    }
-
-    private boolean isAllowedDocType(MediaType mediaType) {
-        return Arrays
-                .asList(DocumentTypes.DOCX, DocumentTypes.PDF, DocumentTypes.TXT)
-                .stream()
-                .map(Object::toString)
-                .anyMatch(x -> x.equals(mediaType.toString()));
     }
 }

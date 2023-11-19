@@ -23,6 +23,9 @@
     <!-- The output path for the final JARs. -->
     <outputPath>${project.build.directory}/../../build</outputPath>
 
+    <!-- The resource directory -->
+    <resPath>${outputPath}/../resources</resPath>
+
     <!-- Other properties. -->
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
   </properties>
@@ -56,15 +59,6 @@
   </dependencyManagement>
 
   <build>
-    <resources>
-      <resource>
-        <directory>src/main/java</directory>
-        <includes>
-          <include>**/*.java</include>
-        </includes>
-      </resource>
-    </resources>
-
     <!-- Inherited across submodules. -->
     <plugins>
       <!-- https://mvnrepository.com/artifact/org.apache.maven.plugins/maven-compiler-plugin -->
@@ -147,11 +141,25 @@
                 </entryPoints>
                 <artifactSet>
                   <excludes>
+                    <exclude>junit:*</exclude>
+                    <exclude>org.slf4j:*</exclude>
                     <exclude>info.picocli:*</exclude>
                     <exclude>org.apache.tika:*</exclude>
                     <exclude>org.apache.lucene:*</exclude>
+                    <exclude>org.apache.logging.log4j:*</exclude>
+                    <exclude>org.apache.tuscany.sca.aggregation:*</exclude>
                   </excludes>
                 </artifactSet>
+                <filters>
+                  <filter>
+                    <artifact>*:*</artifact>
+                    <excludes>
+                      <exclude>META-INF/*.SF</exclude>
+                      <exclude>META-INF/*.DSA</exclude>
+                      <exclude>META-INF/*.RSA</exclude>
+                    </excludes>
+                  </filter>
+                </filters>
               </configuration>
             </execution>
           </executions>
@@ -172,7 +180,39 @@
               </goals>
               <configuration>
                 <outputDirectory>${outputPath}/libs</outputDirectory>
+                <includeGroupIds>org.slf4j</includeGroupIds>
+                <includeGroupIds>info.picocli</includeGroupIds>
+                <includeGroupIds>org.apache.tika</includeGroupIds>
                 <includeGroupIds>org.apache.lucene</includeGroupIds>
+                <includeGroupIds>org.apache.logging.log4j</includeGroupIds>
+                <includeGroupIds>org.apache.tuscany.sca.aggregation</includeGroupIds>
+              </configuration>
+            </execution>
+          </executions>
+        </plugin>
+
+        <!-- Copy resource files to output directory -->
+        <!-- https://mvnrepository.com/artifact/org.apache.maven.plugins/maven-resources-plugin -->
+        <plugin>
+          <artifactId>maven-resources-plugin</artifactId>
+          <version>3.3.1</version>
+          <executions>
+            <execution>
+              <id>copy-resources</id>
+              <phase>package</phase>
+              <goals>
+                <goal>copy-resources</goal>
+              </goals>
+              <configuration>
+                <outputDirectory>${outputPath}/resources</outputDirectory>
+                <resources>
+                  <resource>
+                    <directory>${resPath}</directory>
+                    <includes>
+                      <include>**/*.txt</include>
+                    </includes>
+                  </resource>
+                </resources>
               </configuration>
             </execution>
           </executions>

@@ -6,10 +6,10 @@ import java.nio.file.PathMatcher;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-public class ExtensionPathFilter implements PathFilter {
+public class PathSuffixFilter implements Filter<Path> {
     private final PathMatcher extMatcher;
 
-    public ExtensionPathFilter(String... fileExtensions) {
+    public PathSuffixFilter(String... fileExtensions) {
         extMatcher = fileExtensions.length == 0 ? getDefaultMatcher() : getMatcherWithExtensions(fileExtensions);
     }
 

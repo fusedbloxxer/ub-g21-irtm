@@ -3,17 +3,16 @@ package unibuc.fmi.command;
 import java.nio.file.Path;
 import java.util.concurrent.Callable;
 
-import org.apache.lucene.document.TextField;
-
-import picocli.CommandLine.Parameters;
-import picocli.CommandLine.Command;
+import unibuc.fmi.common.Utils;
 import picocli.CommandLine.Option;
 import unibuc.fmi.file.PathSearch;
-import unibuc.fmi.file.PathSearch.PathSearchOptions;
-import unibuc.fmi.indexer.DocumentIndexer;
+import picocli.CommandLine.Command;
 import unibuc.fmi.parse.TikaParser;
-import unibuc.fmi.common.Utils;
+import picocli.CommandLine.Parameters;
+import unibuc.fmi.file.TikaDocTypeFilter;
+import unibuc.fmi.indexer.DocumentIndexer;
 import unibuc.fmi.document.DocumentFields;
+import unibuc.fmi.file.PathSearch.PathSearchOptions;
 
 @Command(name = "index", version = "1.0.0", mixinStandardHelpOptions = true, exitCodeList = {})
 public class IndexCommand implements Callable<Integer> {
@@ -40,27 +39,36 @@ public class IndexCommand implements Callable<Integer> {
 
         // Create utils
         var docIndexer = new DocumentIndexer(indexPath, Utils.LUCENE_VERSION);
+        var analyzer = docIndexer.getIndexWriter().getAnalyzer();
+        var docFilter = new TikaDocTypeFilter();
         var tika = new TikaParser();
 
         // Save files into the Index
         for (Path filepath : filepaths) {
             // Parse document
-            var raw = tika.parse(filepath);
+            var content = tika.parse(filepath);
 
             // Skip document with errors
-            if (raw.isEmpty()) {
+            if (content.isEmpty()) {
                 continue;
             }
 
-            // Show content
-            var content = raw.get();
-            System.out.println("FILENAME: " + content.getFilename());
-            System.out.println("MEDIA_TYPE: " + content.getMediaType());
-            Utils.debugAnalyzer(docIndexer.getIndexWriter().getAnalyzer(), DocumentFields.FIELD_CONTENT,
-                    content.getText());
+            // Skip documents with non-supported type
+            if (!docFilter.accept(content.get().getMediaType())) {
+                if (Utils.IsDebug) {
+                    System.out.println("[Debug] File is ignored: " + content.get().getFilepath());
+                }
+            }
+
+            // Inspect the process
+            if (Utils.IsDebug) {
+                System.out.println("[Debug] Adding document from: " + content.get().getFilepath());
+                System.out.println("[Debug] MEDIA_TYPE: " + content.get().getMediaType());
+                Utils.debugAnalyzer(analyzer, DocumentFields.FIELD_CONTENT, content.get().getText());
+            }
 
             // Index content
-            docIndexer.addDoc(content);
+            docIndexer.addDoc(content.get());
         }
 
         // Commit the changes

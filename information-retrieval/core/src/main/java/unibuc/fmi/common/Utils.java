@@ -1,13 +1,19 @@
 package unibuc.fmi.common;
 
+import java.io.BufferedWriter;
 import java.io.IOException;
+import java.io.PrintWriter;
+import java.nio.file.Files;
+import java.io.FileWriter;
+import java.nio.file.Path;
+import java.util.Optional;
 
 import org.apache.lucene.analysis.Analyzer;
 import org.apache.lucene.analysis.TokenStream;
 import org.apache.lucene.analysis.tokenattributes.CharTermAttribute;
-import org.apache.lucene.analysis.tokenattributes.OffsetAttribute;
-import org.apache.lucene.analysis.tokenattributes.PositionIncrementAttribute;
 import org.apache.lucene.util.Version;
+
+import unibuc.fmi.analyze.attributes.TokenFlagsAttribute;
 
 public class Utils {
     // Constants
@@ -17,9 +23,23 @@ public class Utils {
     public static boolean IsDebug = false;
 
     // DebuggingUtilities
+    public static final Path DEBUG_OUTPUT_PATH = Path.of(".debug/output.txt");
+
     public static void debugAnalyzer(Analyzer analyzer, String name, String value) {
         if (!Utils.IsDebug) {
             return;
+        }
+
+        Optional<PrintWriter> debugOutputWriter = Optional.empty();
+        try {
+            if (!Files.exists(DEBUG_OUTPUT_PATH)) {
+                Files.createDirectories(DEBUG_OUTPUT_PATH.getParent());
+                Files.createFile(DEBUG_OUTPUT_PATH);
+            }
+            debugOutputWriter = Optional
+                    .of(new PrintWriter(new BufferedWriter(new FileWriter(DEBUG_OUTPUT_PATH.toFile()))));
+        } catch (IOException e) {
+            System.err.println("[Debug] Cannot write tokens to debug output file: " + e.getMessage());
         }
 
         System.out.println("[Debug] Inspecting analysis...");
@@ -29,22 +49,24 @@ public class Utils {
             ts.reset();
 
             // Extract info from each token
-            OffsetAttribute offAttr = ts.addAttribute(OffsetAttribute.class);
+            TokenFlagsAttribute tokenFlagAttr = ts.addAttribute(TokenFlagsAttribute.class);
             CharTermAttribute termAttr = ts.addAttribute(CharTermAttribute.class);
-            PositionIncrementAttribute posAttr = ts.addAttribute(PositionIncrementAttribute.class);
             System.out.print("[Debug] ");
 
             while (ts.incrementToken()) {
-                System.out.printf("[%s, (%d, %d), %d] ", termAttr.toString(), offAttr.startOffset(),
-                        offAttr.endOffset(),
-                        posAttr.getPositionIncrement());
+                System.out.printf("[%s]: %s %s\n", termAttr.toString(), tokenFlagAttr.getTokenFlags(),
+                        tokenFlagAttr.isFinalToken());
+                debugOutputWriter
+                        .ifPresent(x -> x.printf("[%s]: %s\n", termAttr.toString(), tokenFlagAttr.getTokenFlags()));
             }
+
             System.out.println();
             System.out.println("[Debug] Analysis complete.");
-
             ts.end();
         } catch (IOException e) {
-            System.err.println("[Debug] Token analysis failed");
+            System.err.println("[Debug] Token analysis failed: " + e.getMessage());
+        } finally {
+            debugOutputWriter.ifPresent(x -> x.close());
         }
     }
 }
