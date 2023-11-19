@@ -67,7 +67,8 @@ public class SimpleQueryHandler implements Subscriber<String> {
                         try {
                             Document document = fields.document(scoreDoc.doc);
                             System.out.print(counter.addAndGet(1) + ". ");
-                            System.out.println(document.getField(DocumentFields.FIELD_FILEPATH).stringValue());
+                            System.out.println(
+                                    "\"" + document.getField(DocumentFields.FIELD_FILEPATH).stringValue() + "\"");
                         } catch (IOException e) {
                             System.err.println("Could not retrieve found doc: " + e.getMessage());
                             e.printStackTrace();

@@ -44,6 +44,7 @@ public class RoTextAnalyzer extends Analyzer {
     private static final Path PATH_STOPWORDS_FILE = PATH_RES.resolve("stopwords.txt");
     private static final Path PATH_STOPWORDS_NO_ACCENTS_FILE = PATH_RES.resolve("stopwords_no_accents.txt");
     private static final int FLAG_PUNCTUATION = 1;
+    private final boolean allowSynonyms = false;
     private final AnalyzerMode mode;
 
     public RoTextAnalyzer(AnalyzerMode mode) {
@@ -79,7 +80,7 @@ public class RoTextAnalyzer extends Analyzer {
         ts = new LowerCaseFilter(ts);
 
         // Insert synonyms at query time
-        if (mode == AnalyzerMode.INDEXING) {
+        if (mode == AnalyzerMode.INDEXING && allowSynonyms) {
             var synonyms = loadSynonyms(true);
             if (synonyms.isPresent()) {
                 ts = new SynonymGraphFilter(ts, synonyms.get(), true);
