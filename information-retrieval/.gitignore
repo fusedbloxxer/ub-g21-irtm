@@ -2,7 +2,9 @@
 # Edit at https://www.toptal.com/developers/gitignore?templates=maven,java,linux,visualstudiocode,python,git
 
 # Custom #
+**/.build/
 **/.index/
+**/.debug/
 test/**/*.pdf
 test/**/*.txt
 test/**/*.doc

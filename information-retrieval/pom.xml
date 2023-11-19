@@ -21,7 +21,7 @@
     <mainEntry>${project.groupId}.App</mainEntry>
 
     <!-- The output path for the final JARs. -->
-    <outputPath>${project.build.directory}/../../build</outputPath>
+    <outputPath>${project.build.directory}/../../.build</outputPath>
 
     <!-- The resource directory -->
     <resPath>${outputPath}/../resources</resPath>
