@@ -58,6 +58,7 @@ public class IndexCommand implements Callable<Integer> {
                 if (Utils.IsDebug) {
                     System.out.println("[Debug] File is ignored: " + content.get().getFilepath());
                 }
+                continue;
             }
 
             // Inspect the process
