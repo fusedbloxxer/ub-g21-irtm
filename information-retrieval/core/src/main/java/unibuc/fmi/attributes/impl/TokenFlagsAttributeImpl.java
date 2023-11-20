@@ -1,11 +1,11 @@
-package unibuc.fmi.analyze.attributes.impl;
+package unibuc.fmi.attributes.impl;
 
 import java.util.EnumSet;
 
 import org.apache.lucene.util.AttributeImpl;
 import org.apache.lucene.util.AttributeReflector;
 
-import unibuc.fmi.analyze.attributes.TokenFlagsAttribute;
+import unibuc.fmi.attributes.TokenFlagsAttribute;
 
 public class TokenFlagsAttributeImpl extends AttributeImpl implements TokenFlagsAttribute {
     private EnumSet<TokenFlag> tokenFlags;
@@ -20,6 +20,9 @@ public class TokenFlagsAttributeImpl extends AttributeImpl implements TokenFlags
         return tokenFlags;
     }
 
+    /**
+     * Should be final when a token has a single non-default flag.
+     */
     @Override
     public boolean isFinalToken() {
         if (tokenFlags.size() == 1) {

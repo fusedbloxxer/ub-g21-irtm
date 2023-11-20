@@ -1,4 +1,4 @@
-package unibuc.fmi.parse;
+package unibuc.fmi.parser;
 
 import java.io.BufferedInputStream;
 import java.io.FileInputStream;
@@ -14,6 +14,7 @@ import org.apache.tika.parser.ParseContext;
 import org.apache.tika.sax.BodyContentHandler;
 
 import unibuc.fmi.common.Utils;
+import unibuc.fmi.document.DocumentContent;
 
 import org.apache.tika.exception.TikaException;
 import org.apache.tika.parser.AutoDetectParser;
@@ -32,7 +33,7 @@ public class TikaParser {
         this(new TikaConfig());
     }
 
-    public Optional<TikaContent> parse(Path path) {
+    public Optional<DocumentContent> parse(Path path) {
         System.out.println(path);
         BodyContentHandler handler = new BodyContentHandler(TIKA_NO_CHAR_LIMIT);
         AutoDetectParser parser = new AutoDetectParser(config);
@@ -45,7 +46,7 @@ public class TikaParser {
         try (FileInputStream fs = new FileInputStream(path.toFile()); InputStream bs = new BufferedInputStream(fs)) {
             MediaType mediaType = parser.getDetector().detect(bs, metadata);
             parser.parse(bs, handler, metadata, parseContext);
-            return Optional.of(new TikaContent(path, handler, metadata, mediaType));
+            return Optional.of(new DocumentContent(path, handler, metadata, mediaType));
         } catch (Exception e) {
             if (Utils.IsDebug) {
                 System.err.println("[Debug] Tika cannot parse " + path.toAbsolutePath());

@@ -1,4 +1,4 @@
-package unibuc.fmi.queryhandler;
+package unibuc.fmi.query;
 
 import org.apache.lucene.queryparser.classic.QueryParser;
 

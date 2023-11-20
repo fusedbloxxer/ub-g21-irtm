@@ -1,4 +1,4 @@
-package unibuc.fmi.file;
+package unibuc.fmi.filters;
 
 @FunctionalInterface
 public interface Filter<T> {

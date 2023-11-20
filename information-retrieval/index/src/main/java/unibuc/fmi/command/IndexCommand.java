@@ -3,16 +3,18 @@ package unibuc.fmi.command;
 import java.nio.file.Path;
 import java.util.concurrent.Callable;
 
+import unibuc.fmi.analyzer.AnalyzerMode;
+import unibuc.fmi.analyzer.AnalyzerOptions;
 import unibuc.fmi.common.Utils;
 import picocli.CommandLine.Option;
 import unibuc.fmi.file.PathSearch;
 import picocli.CommandLine.Command;
-import unibuc.fmi.parse.TikaParser;
 import picocli.CommandLine.Parameters;
-import unibuc.fmi.file.TikaDocTypeFilter;
-import unibuc.fmi.indexer.DocumentIndexer;
+import unibuc.fmi.parser.TikaParser;
 import unibuc.fmi.document.DocumentFields;
 import unibuc.fmi.file.PathSearch.PathSearchOptions;
+import unibuc.fmi.filters.DocumentTypeFilter;
+import unibuc.fmi.index.DocumentIndexer;
 
 @Command(name = "index", version = "1.0.0", mixinStandardHelpOptions = true, exitCodeList = {})
 public class IndexCommand implements Callable<Integer> {
@@ -22,6 +24,10 @@ public class IndexCommand implements Callable<Integer> {
     @Option(names = { "-i",
             "--index-path" }, paramLabel = "INDEXPATH", defaultValue = ".index", description = "the path to where the index will be saved (default: ${DEFAULT-VALUE})")
     Path indexPath;
+
+    @Option(names = { "-s",
+            "--synonyms" }, defaultValue = "false", negatable = true, required = false, description = "inject synonyms for each token that represents a word, however it may produce many false positives due to ambiguity (default: ${DEFAULT-VALUE})")
+    boolean useSynonyms;
 
     @Option(names = { "-f",
             "--file-type" }, paramLabel = "FILETYPE", split = ",", description = "supported filetype formats")
@@ -37,10 +43,11 @@ public class IndexCommand implements Callable<Integer> {
         // Obtain the paths to the files of interest recursively
         var filepaths = PathSearch.from(dataPath, new PathSearchOptions(supportedFileTypes));
 
-        // Create utils
-        var docIndexer = new DocumentIndexer(indexPath, Utils.LUCENE_VERSION);
+        // Create helpers to process the documents
+        var analyzerOptions = new AnalyzerOptions(AnalyzerMode.INDEXING, useSynonyms);
+        var docIndexer = new DocumentIndexer(indexPath, analyzerOptions);
         var analyzer = docIndexer.getIndexWriter().getAnalyzer();
-        var docFilter = new TikaDocTypeFilter();
+        var docFilter = new DocumentTypeFilter();
         var tika = new TikaParser();
 
         // Save files into the Index

@@ -1,4 +1,4 @@
-package unibuc.fmi.analyze.filters;
+package unibuc.fmi.filters;
 
 import java.io.IOException;
 import java.util.Arrays;
@@ -11,15 +11,22 @@ import org.apache.lucene.analysis.TokenFilter;
 import org.apache.lucene.analysis.TokenStream;
 import org.apache.lucene.analysis.tokenattributes.CharTermAttribute;
 
-import unibuc.fmi.analyze.attributes.TokenFlagsAttribute;
-import unibuc.fmi.analyze.attributes.TokenFlagsAttribute.TokenFlag;
-import unibuc.fmi.analyze.attributes.impl.TokenFlagsAttributeImpl;
+import unibuc.fmi.attributes.TokenFlagsAttribute;
+import unibuc.fmi.attributes.TokenFlagsAttribute.TokenFlag;
+import unibuc.fmi.attributes.impl.TokenFlagsAttributeImpl;
 
 public class PatternTokenFlagsFilter extends TokenFilter {
     private final List<TokenFlagsPatternRule> rules;
     private final TokenFlagsAttribute tokenClassAttr;
     private final CharTermAttribute termAttr;
 
+    /**
+     * Determine if the content of a token is one of the possible TokenFlag values
+     * by applying RegexPatterns. This, in turns sets the TokenFlagsAttribute for
+     * each token.
+     *
+     * @param input A stream of tokens.
+     */
     public PatternTokenFlagsFilter(TokenStream input) {
         super(input);
 
@@ -61,7 +68,7 @@ public class PatternTokenFlagsFilter extends TokenFilter {
         var acrynomRule = new TokenFlagsPatternRule("(?:[a-zA-Z]\\.){2,}",
                 TokenFlagsAttribute.TokenFlag.Acronym);
 
-        // Apply all rules against tokens
+        // Accumulate all rules
         this.rules = Arrays.asList(emailRule, dateRule, phoneRule, numberRule, romanRule, urlRule, acrynomRule);
     }
 
@@ -91,6 +98,13 @@ public class PatternTokenFlagsFilter extends TokenFilter {
         private final EnumSet<TokenFlag> tokenFlags;
         private final Pattern pattern;
 
+        /**
+         * Helper class used to hold a regex that when matched againts token text should
+         * indicate that the token should have a list of flags.
+         *
+         * @param regex      A pattern that represents the given flags.
+         * @param tokenFlags Indicate what a token should represent when matched.
+         */
         public TokenFlagsPatternRule(String regex, TokenFlag... tokenFlags) {
             this.pattern = Pattern.compile(regex);
             this.tokenFlags = tokenFlags.length == 0

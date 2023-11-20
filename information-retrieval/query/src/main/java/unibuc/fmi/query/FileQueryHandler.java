@@ -1,4 +1,4 @@
-package unibuc.fmi.queryhandler;
+package unibuc.fmi.query;
 
 import java.util.List;
 import java.util.Arrays;

@@ -13,7 +13,7 @@ import org.apache.lucene.analysis.TokenStream;
 import org.apache.lucene.analysis.tokenattributes.CharTermAttribute;
 import org.apache.lucene.util.Version;
 
-import unibuc.fmi.analyze.attributes.TokenFlagsAttribute;
+import unibuc.fmi.attributes.TokenFlagsAttribute;
 
 public class Utils {
     // Constants
@@ -25,11 +25,13 @@ public class Utils {
     // DebuggingUtilities
     public static final Path DEBUG_OUTPUT_PATH = Path.of(".debug/output.txt");
 
+    // Print to the console the extracted tokens and also save them to a file.
     public static void debugAnalyzer(Analyzer analyzer, String name, String value) {
-        if (!Utils.IsDebug) {
+        if (!Utils.IsDebug) { // Do not run if debug mode is disabled.
             return;
         }
 
+        // Save tokens to a file to ease debugging in case the outpu is too big.
         Optional<PrintWriter> debugOutputWriter = Optional.empty();
         try {
             if (!Files.exists(DEBUG_OUTPUT_PATH)) {
@@ -42,6 +44,7 @@ public class Utils {
             System.err.println("[Debug] Cannot write tokens to debug output file: " + e.getMessage());
         }
 
+        // Analyze explicitly and record each token both in console and in the file.
         System.out.println("[Debug] Inspecting analysis...");
         System.out.println("[Debug] FieldName: " + name);
         try (TokenStream ts = analyzer.tokenStream(name, value)) {

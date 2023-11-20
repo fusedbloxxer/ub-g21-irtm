@@ -15,17 +15,18 @@ import org.apache.lucene.analysis.Analyzer;
 import org.apache.lucene.store.FSDirectory;
 import org.apache.lucene.store.Directory;
 
-import unibuc.fmi.analyze.RoTextAnalyzer.AnalyzerMode;
-import unibuc.fmi.analyze.RoTextAnalyzer;
 import picocli.CommandLine.ArgGroup;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
+import unibuc.fmi.analyzer.RoTextAnalyzer;
+import unibuc.fmi.analyzer.AnalyzerMode;
+import unibuc.fmi.analyzer.AnalyzerOptions;
 import unibuc.fmi.common.Utils;
-import unibuc.fmi.queryhandler.QueryHandlerFactory;
+import unibuc.fmi.query.QueryHandlerFactory;
 
 @Command(name = "query", version = "1.0.0", mixinStandardHelpOptions = true)
 public class QueryCommand implements Callable<Integer> {
-    static class ExclusiveArgs {
+    public static class ExclusiveArgs {
         @Option(names = {
                 "--it",
                 "--interactive" }, required = true, description = "specify queries interactively (default: ${DEFAULT-VALUE})")
@@ -81,7 +82,8 @@ public class QueryCommand implements Callable<Integer> {
         // Open the directory of the index
         try (Directory dir = FSDirectory.open(indexPath); DirectoryReader reader = DirectoryReader.open(dir)) {
             // Create analyzer in query mode and prepare for searching
-            Analyzer analyzer = new RoTextAnalyzer(AnalyzerMode.QUERYING);
+            AnalyzerOptions options = new AnalyzerOptions(AnalyzerMode.QUERYING, false);
+            Analyzer analyzer = new RoTextAnalyzer(options);
             QueryParser parser = new QueryParser("content", analyzer);
             IndexSearcher searcher = new IndexSearcher(reader);
 

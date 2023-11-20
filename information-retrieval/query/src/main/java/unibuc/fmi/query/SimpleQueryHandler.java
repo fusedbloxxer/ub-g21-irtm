@@ -1,4 +1,4 @@
-package unibuc.fmi.queryhandler;
+package unibuc.fmi.query;
 
 import java.io.IOException;
 import java.util.concurrent.BrokenBarrierException;

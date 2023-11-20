@@ -1,4 +1,4 @@
-package unibuc.fmi.common;
+package unibuc.fmi.document;
 
 public enum DocumentType {
     DOCX("application/vnd.openxmlformats-officedocument.wordprocessingml.document", "docx"),
@@ -6,13 +6,13 @@ public enum DocumentType {
     PDF("application/pdf", "pdf"),
     TXT("text/plain", "txt");
 
-    DocumentType(String mediaType, String suffix) {
+    private final String mediaType;
+    private final String suffix;
+
+    private DocumentType(String mediaType, String suffix) {
         this.mediaType = mediaType;
         this.suffix = suffix;
     }
-
-    private final String mediaType;
-    private final String suffix;
 
     public String getMediaType() {
         return this.mediaType;

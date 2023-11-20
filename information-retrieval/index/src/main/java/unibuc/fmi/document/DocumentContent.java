@@ -1,4 +1,4 @@
-package unibuc.fmi.parse;
+package unibuc.fmi.document;
 
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -7,15 +7,19 @@ import org.apache.tika.metadata.Metadata;
 import org.apache.tika.mime.MediaType;
 import org.xml.sax.ContentHandler;
 
-public class TikaContent {
+public class DocumentContent {
     private static final String METADATA_FILEPATH = "METADATA_FILEPATH";
     private static final String METADATA_FILENAME = "METADATA_FILENAME";
+
     private final MediaType mediaType;
     private final Metadata metadata;
     private final boolean hasError;
     private final String text;
 
-    public TikaContent(Path path, ContentHandler handler, Metadata metadata, MediaType mediaType) {
+    /**
+     * Extract relevant information from Tika's content.
+     */
+    public DocumentContent(Path path, ContentHandler handler, Metadata metadata, MediaType mediaType) {
         this.hasError = false;
         this.metadata = metadata;
         this.mediaType = mediaType;

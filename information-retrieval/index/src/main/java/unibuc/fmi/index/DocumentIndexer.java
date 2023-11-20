@@ -1,4 +1,4 @@
-package unibuc.fmi.indexer;
+package unibuc.fmi.index;
 
 import java.io.IOException;
 import java.io.StringReader;
@@ -12,22 +12,21 @@ import org.apache.lucene.document.Document;
 import org.apache.lucene.index.IndexWriter;
 import org.apache.lucene.store.FSDirectory;
 import org.apache.lucene.store.Directory;
-import org.apache.lucene.util.Version;
 
-import unibuc.fmi.analyze.RoTextAnalyzer.AnalyzerMode;
+import unibuc.fmi.analyzer.AnalyzerOptions;
+import unibuc.fmi.analyzer.RoTextAnalyzer;
+import unibuc.fmi.document.DocumentContent;
 import unibuc.fmi.document.DocumentFields;
-import unibuc.fmi.analyze.RoTextAnalyzer;
-import unibuc.fmi.parse.TikaContent;
 
 public class DocumentIndexer implements AutoCloseable {
     private final IndexWriter indexWriter;
 
-    public DocumentIndexer(Path indexPath, Version version) throws IOException {
+    public DocumentIndexer(Path indexPath, AnalyzerOptions options) throws IOException {
         // Let Lucene choose the proper algorithm for working with files based on OS
         Directory directory = FSDirectory.open(indexPath);
 
         // User per-field analyzer
-        Analyzer analyzer = new RoTextAnalyzer(AnalyzerMode.INDEXING);
+        Analyzer analyzer = new RoTextAnalyzer(options);
 
         // Open the index in CREATE mode to override previous segments
         IndexWriterConfig iwConfig = new IndexWriterConfig(analyzer)
@@ -38,7 +37,7 @@ public class DocumentIndexer implements AutoCloseable {
         indexWriter = new IndexWriter(directory, iwConfig);
     }
 
-    public void addDoc(TikaContent content) throws IOException {
+    public void addDoc(DocumentContent content) throws IOException {
         // Creat a new document to add
         Document document = new Document();
 

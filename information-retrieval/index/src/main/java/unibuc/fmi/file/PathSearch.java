@@ -3,6 +3,10 @@ package unibuc.fmi.file;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
+
+import unibuc.fmi.filters.Filter;
+import unibuc.fmi.filters.PathSuffixFilter;
+
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.nio.file.AccessDeniedException;
