@@ -33,7 +33,8 @@ public class IndexCommand implements Callable<Integer> {
             "--file-type" }, paramLabel = "FILETYPE", split = ",", description = "supported filetype formats")
     String[] supportedFileTypes = new String[] {};
 
-    @Option(names = { "--debug" }, negatable = true, description = "enable debugging mode (default: ${DEFAULT-VALUE})")
+    @Option(names = { "-d",
+            "--debug" }, negatable = true, description = "enable debugging mode (default: ${DEFAULT-VALUE})")
     boolean debug = false;
 
     public Integer call() throws Exception {
