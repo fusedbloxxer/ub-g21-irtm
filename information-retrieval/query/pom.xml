@@ -48,6 +48,7 @@
         <artifactId>exec-maven-plugin</artifactId>
         <configuration>
           <skip>false</skip>
+          <commandlineArgs></commandlineArgs>
         </configuration>
       </plugin>
 
@@ -61,6 +62,19 @@
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-shade-plugin</artifactId>
+      </plugin>
+
+      <!-- https://mvnrepository.com/artifact/org.apache.maven.plugins/maven-dependency-plugin -->
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-dependency-plugin</artifactId>
+        <executions>
+          <execution>
+            <id>copy-dependencies</id>
+            <configuration>
+            </configuration>
+          </execution>
+        </executions>
       </plugin>
     </plugins>
   </build>

@@ -36,6 +36,8 @@
           <archive>
             <manifest>
               <mainClass />
+              <addClasspath>false</addClasspath>
+              <classpathPrefix>libs</classpathPrefix>
             </manifest>
           </archive>
         </configuration>
@@ -51,6 +53,19 @@
             <configuration>
               <outputDirectory>${project.build.directory}</outputDirectory>
               <entryPoints />
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+
+      <!-- https://mvnrepository.com/artifact/org.apache.maven.plugins/maven-dependency-plugin -->
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-dependency-plugin</artifactId>
+        <executions>
+          <execution>
+            <id>copy-dependencies</id>
+            <configuration>
             </configuration>
           </execution>
         </executions>
