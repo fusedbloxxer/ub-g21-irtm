@@ -43,13 +43,25 @@ public class TikaParser {
             System.out.println("[Debug] Now parsing: " + path.toAbsolutePath().toString());
         }
 
-        try (FileInputStream fs = new FileInputStream(path.toFile()); InputStream bs = new BufferedInputStream(fs)) {
-            MediaType mediaType = parser.getDetector().detect(bs, metadata);
-            parser.parse(bs, handler, metadata, parseContext);
+        // First pass: detect file type
+        MediaType mediaType;
+        try (InputStream is = new BufferedInputStream(new FileInputStream(path.toFile()))) {
+            mediaType = parser.getDetector().detect(is, metadata);
+        } catch (Exception e) {
+            if (Utils.IsDebug) {
+                System.err.println("[Debug] Tika cannot detect file type: " + path.toAbsolutePath());
+                System.err.println("[Debug] Error: " + e.getMessage());
+            }
+            return Optional.empty();
+        }
+
+        // Second pass: read input
+        try (InputStream is = new BufferedInputStream(new FileInputStream(path.toFile()))) {
+            parser.parse(is, handler, metadata, parseContext);
             return Optional.of(new DocumentContent(path, handler, metadata, mediaType));
         } catch (Exception e) {
             if (Utils.IsDebug) {
-                System.err.println("[Debug] Tika cannot parse " + path.toAbsolutePath());
+                System.err.println("[Debug] Tika cannot parse file: " + path.toAbsolutePath());
                 System.err.println("[Debug] Error: " + e.getMessage());
             }
             return Optional.empty();
