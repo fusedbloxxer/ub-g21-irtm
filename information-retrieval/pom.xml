@@ -122,21 +122,9 @@
                 <shadedArtifactAttached>true</shadedArtifactAttached>
                 <shadedClassifierName>shade</shadedClassifierName>
                 <outputDirectory>${outputPath}</outputDirectory>
-                <minimizeJar>true</minimizeJar>
                 <entryPoints>
                   <entryPoint>${mainEntry}</entryPoint>
                 </entryPoints>
-                <artifactSet>
-                  <excludes>
-                    <exclude>junit:*</exclude>
-                    <exclude>org.slf4j:*</exclude>
-                    <exclude>info.picocli:*</exclude>
-                    <exclude>org.apache.tika:*</exclude>
-                    <exclude>org.apache.lucene:*</exclude>
-                    <exclude>org.apache.logging.log4j:*</exclude>
-                    <exclude>org.apache.tuscany.sca.aggregation:*</exclude>
-                  </excludes>
-                </artifactSet>
                 <filters>
                   <filter>
                     <artifact>*:*</artifact>
@@ -147,32 +135,6 @@
                     </excludes>
                   </filter>
                 </filters>
-              </configuration>
-            </execution>
-          </executions>
-        </plugin>
-
-        <!-- Include large dependencies as separate JARs. -->
-        <!-- https://mvnrepository.com/artifact/org.apache.maven.plugins/maven-dependency-plugin -->
-        <plugin>
-          <groupId>org.apache.maven.plugins</groupId>
-          <artifactId>maven-dependency-plugin</artifactId>
-          <version>3.6.1</version>
-          <executions>
-            <execution>
-              <id>copy-dependencies</id>
-              <phase>package</phase>
-              <goals>
-                <goal>copy-dependencies</goal>
-              </goals>
-              <configuration>
-                <outputDirectory>${outputPath}/libs</outputDirectory>
-                <includeGroupIds>org.slf4j</includeGroupIds>
-                <includeGroupIds>info.picocli</includeGroupIds>
-                <includeGroupIds>org.apache.tika</includeGroupIds>
-                <includeGroupIds>org.apache.lucene</includeGroupIds>
-                <includeGroupIds>org.apache.logging.log4j</includeGroupIds>
-                <includeGroupIds>org.apache.tuscany.sca.aggregation</includeGroupIds>
               </configuration>
             </execution>
           </executions>
