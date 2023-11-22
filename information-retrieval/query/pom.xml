@@ -25,13 +25,6 @@
       <version>1.0-SNAPSHOT</version>
     </dependency>
 
-    <!-- https://mvnrepository.com/artifact/junit/junit -->
-    <dependency>
-      <groupId>junit</groupId>
-      <artifactId>junit</artifactId>
-      <scope>test</scope>
-    </dependency>
-
     <!-- https://mvnrepository.com/artifact/org.apache.lucene/lucene-queryparser -->
     <dependency>
       <groupId>org.apache.lucene</groupId>

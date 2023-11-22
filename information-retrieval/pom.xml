@@ -45,19 +45,6 @@
     </dependency>
   </dependencies>
 
-  <dependencyManagement>
-    <!-- Optionally test the project. -->
-    <!-- https://mvnrepository.com/artifact/junit/junit -->
-    <dependencies>
-      <dependency>
-        <groupId>junit</groupId>
-        <artifactId>junit</artifactId>
-        <version>4.13.2</version>
-        <scope>test</scope>
-      </dependency>
-    </dependencies>
-  </dependencyManagement>
-
   <build>
     <!-- Inherited across submodules. -->
     <plugins>

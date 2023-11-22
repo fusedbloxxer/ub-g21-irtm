@@ -52,7 +52,6 @@ public class TikaParser {
                 System.err.println("[Debug] Tika cannot parse " + path.toAbsolutePath());
                 System.err.println("[Debug] Error: " + e.getMessage());
             }
-
             return Optional.empty();
         }
     }
