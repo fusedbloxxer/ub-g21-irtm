@@ -18,6 +18,7 @@ import org.apache.lucene.analysis.StopFilter;
 import org.apache.lucene.analysis.TokenStream;
 import org.apache.lucene.analysis.LowerCaseFilter;
 import org.apache.lucene.analysis.core.FlattenGraphFilter;
+import org.apache.lucene.analysis.core.WhitespaceTokenizer;
 
 import unibuc.fmi.attributes.TokenFlagsAttribute.TokenFlag;
 import unibuc.fmi.filters.ConditionalTokenFlagsFilter;
@@ -76,8 +77,7 @@ public class RoTextAnalyzer extends Analyzer {
         }
 
         // Apply stemming
-        ts = new ConditionalTokenFlagsFilter(ts,
-                is -> new SnowballFilter(is, new RomanianStemmer()), true, TokenFlag.Word);
+        ts = new SnowballFilter(ts, new RomanianStemmer());
 
         // Remove diacritics
         ts = new ConditionalTokenFlagsFilter(ts,
