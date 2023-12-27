@@ -1,0 +1,33 @@
+[tool.poetry]
+name = "emotion-analysis"
+version = "0.1.0"
+description = ""
+authors = ["fusedbloxxer <voidwarden@yahoo.com>"]
+readme = "README.md"
+packages = [{ include = "emotion_analysis" }]
+
+[tool.poetry.dependencies]
+python = "^3.11"
+ipykernel = "^6.27.1"
+jax = "^0.4.23"
+jaxlib = { source = "jax-cuda", extras = ["cuda12_pip"], version="^0.4" }
+seaborn = "^0.13.0"
+flax = "^0.7.5"
+torch = "^2.1.2"
+matplotlib = "^3.8.2"
+scipy = "^1.11.4"
+numpy = "^1.26.2"
+optax = "^0.1.7"
+
+[[tool.poetry.source]]
+name = "jax-cuda"
+url = "https://storage.googleapis.com/jax-releases/jax_cuda_releases.html"
+priority = "primary"
+
+[[tool.poetry.source]]
+name = "PyPI"
+priority = "default"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
