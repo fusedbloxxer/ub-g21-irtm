@@ -1,0 +1,8 @@
+{
+    "pylint.interpreter": [
+        "/home/invokariman/.cache/pypoetry/virtualenvs/emotion-analysis-adVGJZXD-py3.11/bin/python"
+    ],
+    "pylint.enabled": true,
+    "mypy.runUsingActiveInterpreter": true,
+    "mypy.enabled": true
+}
