@@ -14,8 +14,11 @@ handler.setFormatter(formatter)
 logger.setLevel(logging.DEBUG)
 logger.addHandler(handler)
 
-# Allocate memory on-demand to avoid OOM
-os.environ['XLA_PYTHON_CLIENT_ALLOCATOR'] = "platform"
+# Allocate memory on-demand to avoid OOM and debug easily
+# os.environ['XLA_PYTHON_CLIENT_ALLOCATOR'] = "platform"
+
+# Allow JAX to allocate as much memory as possible for faster processing
+os.environ['XLA_PYTHON_CLIENT_PREALLOCATE'] = "true"
 
 # Setup environment
 SEED = 42

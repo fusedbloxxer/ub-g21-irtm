@@ -1,12 +1,21 @@
 import typing as t
+from typing import Any
+from dataclasses import dataclass
 import jax
 from jax import Array
 from jax.typing import ArrayLike
 import flax.linen as nn
-from transformers import RobertaTokenizerFast, RobertaConfig, FlaxRobertaModel
+from transformers import RobertaTokenizerFast, RobertaConfig, FlaxRobertaModel, FlaxPreTrainedModel, PreTrainedTokenizerFast
 
 
-def load_text_model():
+@dataclass(frozen=True)
+class PretrainedTextModel(object):
+    module: nn.Module
+    params: Any
+    tokenizer: PreTrainedTokenizerFast
+
+
+def load_text_model() -> PretrainedTextModel:
     # Load tokenizer
     llm_tokenizer = t.cast(t.Any, RobertaTokenizerFast.from_pretrained('roberta-base', add_prefix_space=False))
     llm_tokenizer: RobertaTokenizerFast = llm_tokenizer
@@ -19,10 +28,8 @@ def load_text_model():
     llm = t.cast(t.Any, FlaxRobertaModel.from_pretrained('roberta-base', config=llm_config, add_pooling_layer=False))
     llm: FlaxRobertaModel = llm
 
-    # Separate the model "shape" and the "params"
-    module = llm.module
-    params = { 'params': llm.params }
-    return module, params, llm_tokenizer
+    # Aggregate all elements
+    return PretrainedTextModel(llm.module, llm.params, llm_tokenizer)
 
 
 class EmotionCauseTextModel(nn.Module):
