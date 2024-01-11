@@ -2,9 +2,9 @@
 # Edit at https://www.toptal.com/developers/gitignore?templates=python,visualstudiocode,linux,jupyternotebooks
 
 ### Project ###
-cache/
-data/
-log/
+/cache/
+/data/
+/log/
 
 ### JupyterNotebooks ###
 # gitignore template for Jupyter Notebooks
