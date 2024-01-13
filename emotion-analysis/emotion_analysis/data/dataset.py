@@ -1,4 +1,4 @@
-from typing import Any, TypedDict, List, Literal, Dict, cast
+from typing import Any, TypedDict, Optional, List, Literal, Dict, Tuple, cast
 from torch.utils.data import Dataset
 from collections import namedtuple
 from dataclasses import dataclass
@@ -7,79 +7,53 @@ from pathlib import Path
 import pathlib as pb
 import pandas as pd
 from pandas import DataFrame
+from itertools import islice
 import json
 import os
 import re
 import jax
 from jax import Array
+from jax.tree_util import tree_map
 import jax.numpy as jnp
+import numpy as np
+import tqdm
+import math
 
 from .types import EmotionCauseConversation
 from. types import EmotionCauseEncoding
+from .types import EmotionCauseMetaData
 from .types import EmotionCauseData
 from .types import Emotion
 
-
-@dataclass
-class Utterance(object):
-    uterrance_id: int
-    text: str
-    speaker: str
-    emotion: Emotion | None = None
-    video_path: str | None = None
-
-    @classmethod
-    def from_dict(cls, data: dict, conversation_id: int, video_dir: pb.Path | None) -> 'Utterance':
-        # Some metadata files have missing video annotations but we can compute them dynamically
-        video_path = str(video_dir / f'dia{conversation_id}utt{data["utterance_ID"]}.mp4') if video_dir else None
-
-        # Make sure the video exists on disk
-        if video_path:
-            assert os.path.exists(video_path), f'no video file was found on disk at {video_path}'
-
-        # Mapping to internal format
-        return Utterance(
-            video_path=video_path,
-            emotion=data.get('emotion', None),
-            uterrance_id=data['utterance_ID'],
-            speaker=data['speaker'],
-            text=data['text'],
-        )
-
-
-@dataclass
-class Conversation(object):
-    conversation_id: int
-    conversation: List[Utterance]
-    emotion_cause: List[List[str]]
-
-    @classmethod
-    def from_dict(cls, data: dict, video_dir: pb.Path | None) -> 'Conversation':
-        # All utterances in a conversation originate from itself
-        make_utterance = partial(Utterance.from_dict, conversation_id=data['conversation_ID'], video_dir=video_dir)
-
-        # Mapping to internal format
-        return Conversation(
-            conversation=list(map(make_utterance, data['conversation'])),
-            emotion_cause=data.get('emotion-cause_pairs', []),
-            conversation_id=data['conversation_ID'],
-        )
+from .transform import DataTransform
+from .transform import DataTokenize
 
 
 class ECACDataset(Dataset):
     def __init__(self,
                  data_dir: pb.Path,
+                 transform: DataTransform,
                  task: Literal['task_1', 'task_2'] = 'task_1',
-                 split: Literal['train', 'eval', 'test'] = 'train') -> None:
-        super().__init__()
+                 split: Literal['train', 'eval', 'test'] = 'train',
+                 max_conversation_len: Optional[int] = 24,
+                 max_utterance_len: Optional[int] = 10,
+                 filter_data: bool = False,
+                 batch_size: int = 24) -> None:
+        super(ECACDataset, self).__init__()
+
+        # Argument Guards
         assert task in ('task_1', 'task_2'), 'invalid task type'
         assert split in ('train', 'eval', 'test'), 'invalid split type'
+        assert max_utterance_len is None or max_utterance_len > 0, 'max_utterance_len must be greater than zero'
+        assert max_conversation_len is None or max_conversation_len > 0, 'max_conversation_len must be greater than zero'
+        if filter_data and split != 'train':
+            raise ValueError('filter can only be used with the train split')
 
         # Data paths
-        self.video_pattern: str = r'dia\d+utt\d+\.mp4'
-        self.data_dir_path = data_dir / split / task
-        self.data_path = self.data_dir_path / f'{task}_{split}.json'
-        self.video_dir_path = self.data_dir_path / 'video'
+        self.__video_pattern: str = r'dia\d+utt\d+\.mp4'
+        self.__data_dir_path = data_dir / split / task
+        self.__data_path = self.__data_dir_path / f'{task}_{split}.json'
+        self.__video_dir_path = self.__data_dir_path / 'video'
 
         # Dataset settings
         self.task: Literal['task_1', 'task_2'] = task
@@ -89,42 +63,102 @@ class ECACDataset(Dataset):
         self.class_to_emotion = {i: e for i, e in enumerate(self.emotions)}
         self.num_emotions = len(self.emotions)
 
+        # Transformation options
+        self.__batch_size = batch_size
+        self.__filter_data = filter_data
+        self.__transform = transform
+        self.__max_utterance_len = max_utterance_len
+        self.__max_conversation_len = max_conversation_len
+
         # Integrity checks
-        if not self.data_dir_path.exists():
-            raise FileNotFoundError(self.data_dir_path)
-        if not self.data_path.exists():
-            raise FileNotFoundError(self.data_path)
+        if not self.__data_dir_path.exists():
+            raise FileNotFoundError(self.__data_dir_path)
+        if not self.__data_path.exists():
+            raise FileNotFoundError(self.__data_path)
         if self.task == 'task_2':
-            if not self.video_dir_path.exists():
-                raise FileNotFoundError(self.video_dir_path)
-            if len(video_paths := list(self.video_dir_path.iterdir())) == 0:
-                raise Exception('no files were found under ' + str(self.video_dir_path))
-            if not all(map(lambda x: re.fullmatch(self.video_pattern, x.name), video_paths)):
-                raise Exception('found invalid files under ' + str(self.video_dir_path))
+            if not self.__video_dir_path.exists():
+                raise FileNotFoundError(self.__video_dir_path)
+            if len(video_paths := list(self.__video_dir_path.iterdir())) == 0:
+                raise Exception('no files were found under ' + str(self.__video_dir_path))
+            if not all(map(lambda x: re.fullmatch(self.__video_pattern, x.name), video_paths)):
+                raise Exception('found invalid files under ' + str(self.__video_dir_path))
 
         # Read and prepare the dataset
-        data = self.__read_data(self.data_path)
-        data = self.__transform_data(data)
-        self.data = data
-        # self.data = self.__tokenize_data(self.data)
+        self.data = self.__prepare_dataset()
 
-    # def __getitem__(self, index: int):
-    #     data = self.data_[self.data_['conversation_id'] == index]
-    #     if self.split == 'train':
-    #         assert self.labels_ is not None, 'no labels were found for train split'
-    #         labels = self.labels_[self.labels_['conversation_id'] == index]
-    #     else:
-    #         labels = None
-    #     return (data, labels)
+    def __getitem__(self, index: int) -> EmotionCauseData:
+        # Select the id of the conversation from the unique list of ids
+        conversation_id = self.__conversation_ids[index]
+        
+        # Get metadata for conversations
+        metadata_conversations = self.data.metadata.conversation[self.data.metadata.conversation['conversation_id'] == conversation_id]
 
-    # def __len__(self) -> int:
-    #     return len(self.data_['conversation_id'].unique())
+        # Get metadata for labels
+        if self.data.metadata.emotion_cause_pairs is not None:
+            metadata_label = self.data.metadata.emotion_cause_pairs[self.data.metadata.emotion_cause_pairs['conversation_id'] == conversation_id]
+        else:
+            metadata_label = None
 
-    def __read_data(self, path: Path) -> List[EmotionCauseConversation]:
+        # Aggregate metadata
+        metadata = EmotionCauseMetaData(metadata_conversations, metadata_label)
+        
+        # For each feature select only the relevant one for the current conversation id
+        encoding = tree_map(lambda x: x[index], self.data.encoding)
+
+        # Aggregate metadata and encoding
+        return EmotionCauseData(metadata, encoding)
+
+    def __len__(self) -> int:
+        return len(self.__conversation_ids)
+
+    def __prepare_dataset(self) -> EmotionCauseData:
+        raw_data = self.__read_dataset(self.__data_path)
+        metadata = self.__tabulate_data(raw_data)
+        metadata = self.__filter_dataset(metadata)
+        encoding = self.__encode_data(metadata)
+        return EmotionCauseData(metadata, encoding)
+
+    def __filter_dataset(self, dataset: EmotionCauseMetaData) -> EmotionCauseMetaData:
+        if not self.__filter_data or dataset.emotion_cause_pairs is None:
+            return dataset
+        if self.__max_conversation_len:
+            # Get number of utterances for each conversation
+            conversation_lengths = dataset.conversation['conversation_id'] \
+                .value_counts(sort=False) \
+                .rename('number_of_utterances') \
+                .reset_index()
+
+            # Get the conversations that have at most `max_conversation_len` utterances
+            kept_conversation_ids = conversation_lengths[conversation_lengths['number_of_utterances'] <= self.__max_conversation_len]['conversation_id']
+
+            # Remove the other from both data and labels
+            dataset.conversation = dataset.conversation[dataset.conversation['conversation_id'].isin(kept_conversation_ids)] \
+                .reset_index(drop=True)
+            dataset.emotion_cause_pairs = dataset.emotion_cause_pairs[dataset.emotion_cause_pairs['conversation_id'].isin(kept_conversation_ids)] \
+                .reset_index(drop=True)
+        if self.__max_utterance_len:
+            # Get number of units for each utterance
+            utterance_lengths = dataset.conversation['text'] \
+                .apply(lambda x: len(x.split(' '))) \
+                .rename('number_of_units') \
+                .reset_index()
+            utterance_lengths['conversation_id'] = dataset.conversation['conversation_id']
+
+            # Take only the conversations with at most `max_utterance_len` number of units
+            skip_conversation_ids = utterance_lengths[utterance_lengths['number_of_units'] >= self.__max_utterance_len]['conversation_id']
+
+            # Remove the other from both data and labels
+            dataset.conversation = dataset.conversation[~dataset.conversation['conversation_id'].isin(skip_conversation_ids)] \
+                .reset_index(drop=True)
+            dataset.emotion_cause_pairs = dataset.emotion_cause_pairs[~dataset.emotion_cause_pairs['conversation_id'].isin(skip_conversation_ids)] \
+                .reset_index(drop=True)
+        return dataset
+
+    def __read_dataset(self, path: Path) -> List[EmotionCauseConversation]:
         with open(path, 'r') as dataset_file:
             return json.load(dataset_file)
 
-    def __transform_data(self, dataset: List[EmotionCauseConversation]) -> EmotionCauseData:
+    def __tabulate_data(self, dataset: List[EmotionCauseConversation]) -> EmotionCauseMetaData:
         # Transform to pandas format for faster processing
         data_, labels_ = [], []
 
@@ -144,13 +178,17 @@ class ECACDataset(Dataset):
                     emotion: str = cast(str, utterance.get('emotion', ''))
                     emotion_label: int | None = self.emotion_to_class.get(emotion, None)
                     data_[-1]['emotion'] = emotion_label
+                else:
+                    data_[-1]['emotion'] = None
 
                 # Obtain video_path 
                 if self.task == 'task_2':
                     video_name = f'dia{conversation["conversation_ID"]}utt{utterance["utterance_ID"]}.mp4'
-                    video_path = self.video_dir_path / video_name
+                    video_path = self.__video_dir_path / video_name
                     assert os.path.exists(video_path), f'no video file was found on disk at {video_path}'
-                    data_[-1]['video_path'] = video_path
+                    data_[-1]['video_path'] = str(video_path)
+                else:
+                    data_[-1]['video_path'] = None
 
             # Proceed further only if labels are available
             if self.split != 'train':
@@ -185,11 +223,45 @@ class ECACDataset(Dataset):
                         .format(conversation['conversation_ID'], utterance_id, cause_id, cause_str)
                     labels_[-1]['cause_start'] = cause_index_start
                     labels_[-1]['cause_stop'] = cause_index_stop
+                else:
+                    labels_[-1]['cause_start'] = None
+                    labels_[-1]['cause_stop'] = None
 
         # Aggregate data and labels
         data: DataFrame = pd.DataFrame(data_)
         labels: DataFrame | None = pd.DataFrame(labels_) if self.split == 'train' else None
-        return EmotionCauseData(data, labels)
+        return EmotionCauseMetaData(data, labels)
 
-    def __tokenize_data(self, dataset: EmotionCauseData) -> EmotionCauseEncoding:
-        pass
+    def __encode_data(self, dataset: EmotionCauseMetaData) -> EmotionCauseEncoding:
+        # Accumulate all batches
+        batches = []
+
+        # Find all unique conversations
+        self.__conversation_ids = dataset.conversation['conversation_id'].unique()
+
+        # Split the transformation into batches
+        n_batches: int = math.ceil(len(self.__conversation_ids) / self.__batch_size)
+
+        # Encode each batch of conversations
+        for batch_index in tqdm.trange(n_batches, desc='batch'):
+            batch_start: int = batch_index * self.__batch_size
+            batch_stop: int = min(batch_start + self.__batch_size, len(self.__conversation_ids))
+            batch_ids: np.ndarray = self.__conversation_ids[batch_start: batch_stop]
+
+            # Select batch of conversations
+            batch_data = dataset.conversation[dataset.conversation['conversation_id'].isin(batch_ids)]
+
+            # Select batch of labels
+            if dataset.emotion_cause_pairs is not None:
+                batch_labels = dataset.emotion_cause_pairs[dataset.emotion_cause_pairs['conversation_id'].isin(batch_ids)]
+            else:
+                batch_labels = None
+
+            # Encode the samples
+            batches.append(dict(self.__transform((batch_data, batch_labels))))
+
+        # Flatten batches
+        data = {}
+        for key in batches[0].keys():
+            data[key] = jnp.concatenate([batches[idx][key] for idx in range(len(batches))], axis=0)
+        return cast(EmotionCauseEncoding, data)

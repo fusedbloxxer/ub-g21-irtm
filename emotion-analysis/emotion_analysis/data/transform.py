@@ -7,18 +7,28 @@ import pandas as pd
 from pandas import DataFrame, Series
 from dataclasses import dataclass
 from transformers import BatchEncoding, PreTrainedTokenizerFast
+from datasets.formatting.formatting import LazyBatch
 from functools import partial
 
 
 @dataclass
-class Tokenize(object):
+class DataTokenize(object):
     tokenizer: PreTrainedTokenizerFast
     max_length: t.Optional[int] = 93
     padding: t.Literal['longest', 'max_length'] = 'max_length'
 
-    def __call__(self, text: t.List[str]) -> BatchEncoding:
+    def __call__(self, sample: str | t.List[str] | t.Dict[str, t.Any] | LazyBatch) -> BatchEncoding:
+        # Extract `text` from sample
+        if   isinstance(sample, (str, list)):
+            batch: t.List[str] | str = sample
+        elif isinstance(sample, (dict, LazyBatch)):
+            batch: t.List[str] | str = cast(Any, sample['text'])
+        else:
+            raise ValueError('cannot tokenize, invalid type for sample: {}'.format(type(sample)))
+
+        # Tokenize entry or batch
         return self.tokenizer(
-            text=text,
+            text=batch,
             truncation=True,
             padding=self.padding,
             return_tensors='jax',
@@ -30,19 +40,19 @@ class Tokenize(object):
 
 
 @dataclass
-class DataTokenizerCollator(object):
+class DataTransform(object):
     tokenize: t.Callable[[t.List[str]], BatchEncoding]
     max_length: t.Optional[int] = 33
 
-    def __call__(self, x: t.List[t.Tuple[DataFrame, DataFrame | None]]) -> BatchEncoding:
+    def __call__(self, x: t.Tuple[DataFrame, DataFrame | None]) -> BatchEncoding:
         assert len(x) > 0, 'at least one element must be provided'
-        assert len(x[0]) == 2, 'each sample must have two elements'
-        has_labels: bool = x[0][1] is not None
-        batch_size: int = len(x)
+        conv_ids = jnp.asarray(x[0]['conversation_id'].unique())
+        has_labels: bool = x[1] is not None
+        batch_size: int = len(conv_ids)
 
         # Separate data
-        X_df, y_df = list(zip(*x))
-        X_df: DataFrame = pd.concat(cast(list, X_df))
+        X_df = x[0]
+        y_df = cast(DataFrame, x[1])
         has_video: bool = len(X_df) > 0 and not X_df['video_path'].isnull().any()
 
         # Where to split the batch to obtain each individual conversation
@@ -75,13 +85,10 @@ class DataTokenizerCollator(object):
 
         # Create a mask to indicate which utterances represent real data and not just padding
         num_and_pad = jnp.column_stack((conv_lengths, self.max_length - conv_lengths)).reshape(-1)
-        mask = jnp.tile(jnp.array([1, 0]), jnp.array([batch_size,]))
-        mask = jnp.repeat(mask, num_and_pad, axis=0).reshape((batch_size, -1))
-        X['input_mask'] = mask
+        X['input_mask'] = jnp.tile(jnp.array([1, 0]), jnp.array([batch_size,]))
+        X['input_mask'] = jnp.repeat(X.data['input_mask'], num_and_pad, axis=0).reshape((batch_size, -1))
 
         if has_labels:
-            # Stack all causes along the batch axis
-            y_df: DataFrame = pd.concat(cast(list, y_df))
             has_cause: bool = len(y_df) > 0
             has_cause_span: bool = has_cause and not cast(bool, y_df['cause_start'].isnull().any())
 
@@ -91,7 +98,6 @@ class DataTokenizerCollator(object):
             X['emotion_labels'] = jnp.reshape(X.data['emotion_labels'], (batch_size, -1))
 
             # For a mapping of type { CONV_ID: UTTERANCE_ID } for each element in the batch 
-            conv_ids = jnp.asarray(X_df['conversation_id'].unique())
             b_conv_ids = jnp.repeat(conv_ids, conv_len)
             b_utter_ids = jnp.tile(jnp.arange(conv_len), (batch_size,))
             b_conv_utter_ids = map(tuple, jnp.column_stack((b_conv_ids, b_utter_ids)).tolist())
@@ -103,10 +109,11 @@ class DataTokenizerCollator(object):
             # Create causality matrices for the text ranges
             # Where each element can represent an index from 0 to T  
             # (B, 2, C, C): where B is batch_size and 2 stands for start/stop token_index
-            if has_cause_span:
-                # Allocate the matrix and treat zero as the `not_found` token_index
-                X['cause_span'] = np.zeros((batch_size, 2, conv_len, conv_len))
 
+            # Allocate the matrix and treat zero as the `not_found` token_index
+            X['cause_span'] = np.zeros((batch_size, 2, conv_len, conv_len), dtype=jnp.int32)
+
+            if has_cause_span:
                 # Map (conversation_id, cause_id) to the original batch_encoding
                 conv_to_offset = jnp.insert(conv_lengths[:-1], obj=0, values=0).cumsum()
                 conv_to_offset = {idx.item(): offset.item() for idx, offset in zip(conv_ids, conv_to_offset)}
@@ -114,12 +121,12 @@ class DataTokenizerCollator(object):
                 b_cause_idx = jnp.column_stack((b_cause_ids, y_df['cause_start'].to_numpy(), y_df['cause_stop'].to_numpy()))
 
                 # Extract token_index using char_to_token
-                char_to_token = cast(Any, partial(DataTokenizerCollator.char_to_token, X))
+                char_to_token = cast(Any, partial(DataTransform.char_to_token, X))
                 token_id_span = np.apply_along_axis(char_to_token, 1, b_cause_idx)
                 token_id_span = jnp.concatenate((y_df['conversation_id'].to_numpy()[..., None], b_cause_idx, token_id_span), axis=1)
 
                 # Map (conversation_id, utterance_id) and (conversation_id, cause_id) to batch
-                batch_ids = jnp.arange(conv_len)
+                batch_ids = jnp.arange(batch_size)
                 conv_to_batch = {c.item(): b.item() for c, b in zip(conv_ids, batch_ids)}
                 token_id_span = jnp.concatenate((np.vectorize(conv_to_batch.__getitem__)(token_id_span[:, 0])[..., None], token_id_span), axis=1)
 
@@ -137,8 +144,9 @@ class DataTokenizerCollator(object):
                     # Mark
                     X.data['cause_span'][batch_index, 0, utterance_index, cause_index] = start_token_index
                     X.data['cause_span'][batch_index, 1, utterance_index, cause_index] = stop_token_index
-                X['cause_span'] = jnp.asarray(X.data['cause_span'], dtype=jnp.int32)
-                X['cause_mask'] = jnp.astype(X['cause_span'] != 0, jnp.float32)
+
+            # Create mask to indicate which indices to focus at
+            X['cause_mask'] = jnp.astype(X['cause_span'] != 0, jnp.float32)
 
         # Return an aggregation of the data and the labels
         return X

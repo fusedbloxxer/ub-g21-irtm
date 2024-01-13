@@ -31,9 +31,9 @@ EmotionCauseConversation = TypedDict('EmotionCauseConversation', {
 })
 
 
-# Intermediary Dataset representation
+# Intermediary Dataset Representation
 @dataclass
-class EmotionCauseData(object):
+class EmotionCauseMetaData(object):
     # Data
     conversation: DataFrame
 
@@ -41,7 +41,7 @@ class EmotionCauseData(object):
     emotion_cause_pairs: Optional[DataFrame] = None
 
 
-# Final Dataset Representation
+# Dataset Encoding Representation
 class EmotionCauseEncoding(TypedDict):
     # Data
     input_ids: Array
@@ -54,3 +54,10 @@ class EmotionCauseEncoding(TypedDict):
     cause_span: Optional[Array]
     cause_labels: Optional[Array]
     emotion_labels: Optional[Array]
+
+
+# Final Dataset Representation
+@dataclass
+class EmotionCauseData(object):
+    metadata: EmotionCauseMetaData
+    encoding: EmotionCauseEncoding
