@@ -1,7 +1,29 @@
 from jax import Array
-from typing import TypedDict, Optional, List, Tuple, Literal, TypeAlias
+from typing import TypedDict, Optional, List, Tuple, Literal, TypeAlias, NotRequired
 from pandas import DataFrame
 from dataclasses import dataclass
+
+
+# The competition consiers two tasks
+SubTask: TypeAlias = Literal[
+    '1',
+    '2',
+]
+
+
+# There are three data splits in the competition
+DataSplit: TypeAlias = Literal[
+    'train',
+    'trial',
+    'test',
+]
+
+
+TrainSplit: TypeAlias = Literal[
+    'train',
+    'valid',
+    'test',
+]
 
 
 # Paul Ekman Basic Emotion Categories
@@ -21,17 +43,18 @@ EmotionCauseUtterance = TypedDict('EmotionCauseUtterance', {
     'utterance_ID': int,
     'text': str,
     'speaker': str,
-    'emotion': Optional[str],
-    'video_name': Optional[str],
+    'emotion': NotRequired[str],
+    'video_name': NotRequired[str],
 })
 EmotionCauseConversation = TypedDict('EmotionCauseConversation', {
     'conversation_ID': int,
     'conversation': List[EmotionCauseUtterance],
-    'emotion-cause_pairs': Optional[List[Tuple[str, str]]]
+    'emotion-cause_pairs': NotRequired[List[Tuple[str, str]]]
 })
+ECACData = List[EmotionCauseConversation]
 
 
-# Intermediary Dataset Representation
+# Metadata Representation
 @dataclass
 class EmotionCauseMetaData(object):
     # Data
@@ -50,10 +73,10 @@ class EmotionCauseEncoding(TypedDict):
     offset_mapping: Array
 
     # Labels
-    cause_mask: Optional[Array]
-    cause_span: Optional[Array]
-    cause_labels: Optional[Array]
-    emotion_labels: Optional[Array]
+    cause_mask: NotRequired[Array]
+    cause_span: NotRequired[Array]
+    cause_labels: NotRequired[Array]
+    emotion_labels: NotRequired[Array]
 
 
 # Final Dataset Representation

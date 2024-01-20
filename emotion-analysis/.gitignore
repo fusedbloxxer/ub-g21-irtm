@@ -2,6 +2,7 @@
 # Edit at https://www.toptal.com/developers/gitignore?templates=python,visualstudiocode,linux,jupyternotebooks
 
 ### Project ###
+/scripts/mlruns/
 /cache/
 /data/
 /log/

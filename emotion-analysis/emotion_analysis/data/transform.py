@@ -3,18 +3,25 @@ from typing import Any, cast
 from jax import Array, vmap, jit
 import jax.numpy as jnp
 import numpy as np
-import pandas as pd
-from pandas import DataFrame, Series
-from dataclasses import dataclass
+from pandas import DataFrame
+from dataclasses import dataclass, field
+import flax.core.frozen_dict as frozen_dict
 from transformers import BatchEncoding, PreTrainedTokenizerFast
 from datasets.formatting.formatting import LazyBatch
+from collections import defaultdict
 from functools import partial
+from itertools import chain
+
+from .dataset import ECACDataset
+from .types import EmotionCauseData
+from .types import EmotionCauseEncoding
+from .types import EmotionCauseConversation
 
 
 @dataclass
 class DataTokenize(object):
     tokenizer: PreTrainedTokenizerFast
-    max_length: t.Optional[int] = 93
+    max_seq_len: t.Optional[int] = 93
     padding: t.Literal['longest', 'max_length'] = 'max_length'
 
     def __call__(self, sample: str | t.List[str] | t.Dict[str, t.Any] | LazyBatch) -> BatchEncoding:
@@ -31,129 +38,133 @@ class DataTokenize(object):
             text=batch,
             truncation=True,
             padding=self.padding,
-            return_tensors='jax',
+            return_tensors='np',
             add_special_tokens=True,
-            max_length=self.max_length,
             return_attention_mask=True,
-            return_offsets_mapping=True
+            return_offsets_mapping=True,
+            max_length=self.max_seq_len,
         )
 
 
 @dataclass
 class DataTransform(object):
     tokenize: t.Callable[[t.List[str]], BatchEncoding]
-    max_length: t.Optional[int] = 33
+    emotion2label: t.Dict[str, int]
+    max_conv_len: int = 33
+    has_spans: bool = field(kw_only=True)
+    has_video: bool = field(kw_only=True)
+    has_causes: bool = field(kw_only=True)
+    has_emotions: bool = field(kw_only=True)
 
-    def __call__(self, x: t.Tuple[DataFrame, DataFrame | None]) -> BatchEncoding:
-        assert len(x) > 0, 'at least one element must be provided'
-        conv_ids = jnp.asarray(x[0]['conversation_id'].unique())
-        has_labels: bool = x[1] is not None
-        batch_size: int = len(conv_ids)
+    def __call__(self, sample: EmotionCauseConversation) -> EmotionCauseEncoding:
+        emotion_causes = defaultdict(list)
+        cause_spans = defaultdict(list)
+        emotion_labels = []
+        data = {}
 
-        # Separate data
-        X_df = x[0]
-        y_df = cast(DataFrame, x[1])
-        has_video: bool = len(X_df) > 0 and not X_df['video_path'].isnull().any()
+        ### Perform tokenization ###
+        encoding = self.tokenize([utterance['text'] for utterance in sample['conversation']])
+        conv_len = encoding.data['input_ids'].shape[0]
+        pad_len = self.max_conv_len - conv_len
 
-        # Where to split the batch to obtain each individual conversation
-        conv_lengths = jnp.asarray(X_df['conversation_id'].value_counts(sort=False).to_numpy())
-        conv_splits: Array = conv_lengths.cumsum()
+        # Add padding to the conversation
+        input_ids = np.pad(encoding.data['input_ids'], ((0, pad_len), (0, 0)))
+        data['input_ids'] = jnp.asarray(input_ids)
+        attn_mask = np.pad(encoding.data['attention_mask'], ((0, pad_len), (0, 0)))
+        data['attention_mask'] = jnp.asarray(attn_mask)
+        offset = np.pad(encoding.data['offset_mapping'], ((0, pad_len), (0, 0), (0, 0)))
+        data['offset_mapping'] = jnp.asarray(offset)
 
-        # Tokenize all texts at once
-        X: BatchEncoding = self.tokenize(X_df['text'].tolist())
-        seq_len: int = X.data['input_ids'].shape[1]
+        # Create input mask to distinguish data from padding
+        input_mask = np.zeros(self.max_conv_len, dtype=np.float32)
+        input_mask[:len(sample['conversation'])] = 1
+        data['input_mask'] = jnp.asarray(input_mask)
 
-        # Shape is (C, T)
-        # C - is a varying sum of the lengths of all conversation in the batch
-        # T - is the sequence length which is fixed by the tokenize function
-        # We need to ensure that conversations are aligned and create a batch dimension
-        # To do so we can pad with zeros all conversations s.t. that they become aligned
-        pad_index = jnp.repeat(conv_splits, self.max_length - conv_lengths)
+        ### Perform label extraction ### 
+        if self.has_emotions:
+            for utterance in sample['conversation']:
+                # Extract emotions as labels
+                emotion_labels.append(self.emotion2label.get(utterance.get('emotion', '')))
 
-        # Pad and reshape the `input_ids` to be (B, C, T, ...)
-        X['input_ids'] = jnp.insert(X.data['input_ids'], pad_index, jnp.zeros((seq_len,)), axis=0)
-        X['input_ids'] = jnp.reshape(X.data['input_ids'], (batch_size, -1, seq_len))
-        conv_len = X.data['input_ids'].shape[1]
+            # Add padding for alignment
+            emotion_labels = np.pad(emotion_labels, (0, self.max_conv_len - len(emotion_labels)))
+            data['emotion_labels'] = emotion_labels
 
-        # Pad and reshape the `attention_mask`
-        X['attention_mask'] = jnp.insert(X.data['attention_mask'], pad_index, jnp.zeros((seq_len,)), axis=0)
-        X['attention_mask'] = jnp.reshape(X.data['attention_mask'], (batch_size, -1, seq_len))
+        if self.has_causes:
+            for emotion_cause in sample.get('emotion-cause_pairs', []):
+                # Split emotion and cause
+                emotion, cause = emotion_cause
 
-        # Pad and reshape the `offset_mapping`
-        X['offset_mapping'] = jnp.insert(X.data['offset_mapping'], pad_index, jnp.zeros((2,)), axis=0)
-        X['offset_mapping'] = jnp.reshape(X.data['offset_mapping'], (batch_size, -1, seq_len, 2))
+                # Extract utterance 
+                utterance = int(emotion.split('_')[0]) - 1
 
-        # Create a mask to indicate which utterances represent real data and not just padding
-        num_and_pad = jnp.column_stack((conv_lengths, self.max_length - conv_lengths)).reshape(-1)
-        X['input_mask'] = jnp.tile(jnp.array([1, 0]), jnp.array([batch_size,]))
-        X['input_mask'] = jnp.repeat(X.data['input_mask'], num_and_pad, axis=0).reshape((batch_size, -1))
+                # Extract cause
+                cause_info = cause.split('_')
+                cause = int(cause_info[0]) - 1
+                emotion_causes[utterance].append(cause)
 
-        if has_labels:
-            has_cause: bool = len(y_df) > 0
-            has_cause_span: bool = has_cause and not cast(bool, y_df['cause_start'].isnull().any())
+                # Extract span char index
+                if self.has_spans:
+                    span = cause_info[1]
+                    source = sample['conversation'][cause]['text']
+                    boc = source.find(span)
+                    eoc = boc + len(span) - 1
+                    cause_spans[utterance].append((boc, eoc))
 
-            # Provide emotions for all utterances
-            X['emotion_labels'] = jnp.asarray(X_df['emotion'].to_numpy())
-            X['emotion_labels'] = jnp.insert(X.data['emotion_labels'], pad_index, 0, axis=0)
-            X['emotion_labels'] = jnp.reshape(X.data['emotion_labels'], (batch_size, -1))
+            # Add padding for alignment
+            causes = list(chain.from_iterable(emotion_causes.values()))
+            cause_labels = np.zeros(self.max_conv_len, dtype=np.int64)
+            cause_labels[causes] = 1
+            data['cause_labels'] = jnp.asarray(cause_labels)
 
-            # For a mapping of type { CONV_ID: UTTERANCE_ID } for each element in the batch 
-            b_conv_ids = jnp.repeat(conv_ids, conv_len)
-            b_utter_ids = jnp.tile(jnp.arange(conv_len), (batch_size,))
-            b_conv_utter_ids = map(tuple, jnp.column_stack((b_conv_ids, b_utter_ids)).tolist())
+        if self.has_spans:
+            boc_matrix = np.zeros((self.max_conv_len, self.max_conv_len), dtype=np.int64)
+            eoc_matrix = np.zeros((self.max_conv_len, self.max_conv_len), dtype=np.int64)
 
-            # For each utterance in the batch check if it's a cause
-            conv_cause_pairs: t.Set[t.Tuple[int, ...]] = {tuple(x) for x in y_df[['conversation_id', 'cause_id']].values.tolist()}
-            X['cause_labels'] = jnp.asarray([x in conv_cause_pairs for x in b_conv_utter_ids], dtype=jnp.int32).reshape(batch_size, -1)
+            # Fill in ExC with token indices
+            for utterance in cause_spans:
+                for i, (char_boc, char_eoc) in enumerate(cause_spans[utterance]):
+                    cause = emotion_causes[utterance][i]
+                    boc_index = encoding.char_to_token(cause, char_boc)
+                    eoc_index = encoding.char_to_token(cause, char_eoc)
+                    boc_matrix[utterance][cause] = boc_index
+                    eoc_matrix[utterance][cause] = eoc_index
 
-            # Create causality matrices for the text ranges
-            # Where each element can represent an index from 0 to T  
-            # (B, 2, C, C): where B is batch_size and 2 stands for start/stop token_index
+            # Concatenate them
+            span_matrix = np.stack((boc_matrix, eoc_matrix), axis=0)
+            data['cause_span'] = jnp.asarray(span_matrix)
+            span_mask = (span_matrix != 0).astype(np.float32)
+            data['span_mask'] = jnp.asarray(span_mask)
+        return cast(EmotionCauseEncoding, frozen_dict.freeze(data))
 
-            # Allocate the matrix and treat zero as the `not_found` token_index
-            X['cause_span'] = np.zeros((batch_size, 2, conv_len, conv_len), dtype=jnp.int32)
+    @classmethod
+    def from_data(cls, data: ECACDataset, tokenize: t.Callable[[t.List[str]], BatchEncoding], max_conv_len: int = 33):
+        return cls(
+            tokenize=tokenize,
+            max_conv_len=max_conv_len,
+            emotion2label=data.emotion2label,
+            has_spans = data.split == 'train' and data.subtask == '1',
+            has_emotions = data.split == 'train',
+            has_causes = data.split == 'train',
+            has_video = data.subtask == '2',
+        )
 
-            if has_cause_span:
-                # Map (conversation_id, cause_id) to the original batch_encoding
-                conv_to_offset = jnp.insert(conv_lengths[:-1], obj=0, values=0).cumsum()
-                conv_to_offset = {idx.item(): offset.item() for idx, offset in zip(conv_ids, conv_to_offset)}
-                b_cause_ids = jnp.asarray((y_df['cause_id'] + y_df['conversation_id'].map(conv_to_offset)).to_numpy())
-                b_cause_idx = jnp.column_stack((b_cause_ids, y_df['cause_start'].to_numpy(), y_df['cause_stop'].to_numpy()))
 
-                # Extract token_index using char_to_token
-                char_to_token = cast(Any, partial(DataTransform.char_to_token, X))
-                token_id_span = np.apply_along_axis(char_to_token, 1, b_cause_idx)
-                token_id_span = jnp.concatenate((y_df['conversation_id'].to_numpy()[..., None], b_cause_idx, token_id_span), axis=1)
+@dataclass
+class DataCollator(object):
+    transform: DataTransform
 
-                # Map (conversation_id, utterance_id) and (conversation_id, cause_id) to batch
-                batch_ids = jnp.arange(batch_size)
-                conv_to_batch = {c.item(): b.item() for c, b in zip(conv_ids, batch_ids)}
-                token_id_span = jnp.concatenate((np.vectorize(conv_to_batch.__getitem__)(token_id_span[:, 0])[..., None], token_id_span), axis=1)
+    def __call__(self, samples: t.List[EmotionCauseConversation]) -> EmotionCauseEncoding:
+        assert len(samples) >= 1, 'the passed-in argument must contain at least one sample'
+        batch: EmotionCauseEncoding = cast(Any, defaultdict(list))
 
-                # 5. Add them to X['cause_span][:, 0, utter, cause] and X['cause_span][:, 0, utter, cause]
-                for i in range(token_id_span.shape[0]):
-                    # Retrieve token range
-                    start_token_index: int = token_id_span[i, -2].item()
-                    stop_token_index: int = token_id_span[i, -1].item()
+        # Transform all samples and collect them
+        for encoding in map(self.transform, samples):
+            for key in encoding.keys():
+                batch[key].append(encoding[key])
 
-                    # Select position in matrix to insert to
-                    batch_index: int = token_id_span[i, 0].item()
-                    utterance_index: int = y_df.iloc[i]['utterance_id']
-                    cause_index: int = y_df.iloc[i]['cause_id']
+        # Aggregate them under a batch dimension
+        for key in batch.keys():
+            batch[key] = jnp.stack(batch[key], axis=0)
 
-                    # Mark
-                    X.data['cause_span'][batch_index, 0, utterance_index, cause_index] = start_token_index
-                    X.data['cause_span'][batch_index, 1, utterance_index, cause_index] = stop_token_index
-
-            # Create mask to indicate which indices to focus at
-            X['cause_mask'] = jnp.astype(X['cause_span'] != 0, jnp.float32)
-
-        # Return an aggregation of the data and the labels
-        return X
-
-    @staticmethod
-    def char_to_token(text_encoding: BatchEncoding, cause: Array) -> Array:
-        # Obtain the indices for the token_ids at both ends of the range
-        start_id = text_encoding.char_to_token(cause[0].item(), cause[1].item())
-        stop_id  = text_encoding.char_to_token(cause[0].item(), cause[2].item())
-        return jnp.array([start_id, stop_id])
+        return cast(EmotionCauseEncoding, frozen_dict.freeze(batch))
