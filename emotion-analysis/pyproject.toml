@@ -29,6 +29,8 @@ av = "^11.0.0"
 optuna = "^3.5.0"
 evaluate = "^0.4.1"
 datasets = "^2.16.1"
+pillow = "^10.2.0"
+pyyaml = "^6.0.1"
 
 [[tool.poetry.source]]
 name = "PyPI"

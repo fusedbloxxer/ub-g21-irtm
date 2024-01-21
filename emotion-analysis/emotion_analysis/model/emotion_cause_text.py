@@ -1,11 +1,13 @@
-import typing as t
-from typing import Any
-from dataclasses import dataclass
 import jax
-from jax import Array
-from jax.typing import ArrayLike
+import typing as t
 import flax.linen as nn
-from transformers import RobertaTokenizerFast, RobertaConfig, FlaxRobertaModel, FlaxPreTrainedModel, PreTrainedTokenizerFast
+from jax import Array
+from typing import Any
+from jax.typing import ArrayLike
+from dataclasses import dataclass
+from transformers import AutoTokenizer, PreTrainedTokenizerFast
+from transformers import FlaxAutoModel, FlaxPreTrainedModel
+from transformers import AutoConfig, PretrainedConfig
 
 
 @dataclass(frozen=True)
@@ -15,18 +17,18 @@ class PretrainedTextModel(object):
     tokenizer: PreTrainedTokenizerFast
 
 
-def load_text_model() -> PretrainedTextModel:
+def load_text_model(model_repo: str) -> PretrainedTextModel:
     # Load tokenizer
-    llm_tokenizer = t.cast(t.Any, RobertaTokenizerFast.from_pretrained('roberta-base', add_prefix_space=False))
-    llm_tokenizer: RobertaTokenizerFast = llm_tokenizer
+    llm_tokenizer = t.cast(t.Any, AutoTokenizer.from_pretrained(model_repo, add_prefix_space=False))
+    llm_tokenizer: PreTrainedTokenizerFast = llm_tokenizer
 
     # Load base configuration
-    llm_config = t.cast(t.Any, RobertaConfig.from_pretrained('roberta-base'))
-    llm_config: RobertaConfig = llm_config
+    llm_config = t.cast(t.Any, AutoConfig.from_pretrained(model_repo))
+    llm_config: PretrainedConfig = llm_config
 
     # Load base model using standard config
-    llm = t.cast(t.Any, FlaxRobertaModel.from_pretrained('roberta-base', config=llm_config, add_pooling_layer=False))
-    llm: FlaxRobertaModel = llm
+    llm = t.cast(t.Any, FlaxAutoModel.from_pretrained(model_repo, config=llm_config, add_pooling_layer=False))
+    llm: FlaxPreTrainedModel = llm
 
     # Aggregate all elements
     return PretrainedTextModel(llm.module, llm.params, llm_tokenizer)

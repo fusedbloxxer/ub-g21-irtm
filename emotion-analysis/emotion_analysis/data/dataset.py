@@ -69,6 +69,10 @@ class ECACDataset(Dataset):
         return self.__emotions
 
     @property
+    def num_emotions(self) -> int:
+        return len(self.emotions)
+
+    @property
     def emotion2label(self) -> Dict[str, int]:
         return self.__emotion2label
 
@@ -77,11 +81,42 @@ class ECACDataset(Dataset):
         return self.__label2emotion
 
     def __getitem__(self, index: int) -> EmotionCauseConversation:
-        return self.__data[index]
+        sample = self.__data[index]
+
+        return sample
 
     def __len__(self) -> int:
         return len(self.__data)
 
     def __read_data(self):
+        # Read raw dataset
         with open(self.__metadata_path, 'r') as dataset_file:
             self.__data: ECACData = json.load(dataset_file)
+
+        # Inject missing values
+        for sample in self.__data:
+            # Some samples have missing values and the data type cannot be determined
+            sample['has_spans'] = self.split == 'train' and self.subtask == '1'
+            sample['has_emotions'] = self.split == 'train'
+            sample['has_causes'] = self.split == 'train'
+            sample['has_video'] = self.subtask == '2'
+
+            for utterance in sample['conversation']:
+                # Inject missing video name and path
+                if self.subtask == '2':
+                    video_name_fallback: str = f"dia{sample['conversation_ID']}utt{utterance['utterance_ID']}.mp4"
+                    video_name = utterance.get('video_name') or video_name_fallback
+                    utterance['video_path'] = self.__video_dir_path / video_name
+                    utterance['video_name'] = video_name
+
+                # Inject emotion as label
+                if self.split == 'train' and 'emotion' in utterance:
+                    utterance['emotion_label'] = self.emotion2label[utterance['emotion']]
+
+    @classmethod
+    def read_data(cls, data_dir: pb.Path, subtask: SubTask) -> Dict[DataSplit, 'ECACDataset']:
+        ds_train = cls(data_dir, split='train', subtask=subtask)
+        ds_trial = cls(data_dir, split='trial', subtask=subtask)
+        ds_test  = cls(data_dir,  split='test', subtask=subtask)
+        return { 'train': ds_train, 'trial': ds_trial, 'test': ds_test }
+

@@ -13,7 +13,6 @@ from functools import partial
 from itertools import chain
 
 from .dataset import ECACDataset
-from .types import EmotionCauseData
 from .types import EmotionCauseEncoding
 from .types import EmotionCauseConversation
 
@@ -21,8 +20,8 @@ from .types import EmotionCauseConversation
 @dataclass
 class DataTokenize(object):
     tokenizer: PreTrainedTokenizerFast
-    max_seq_len: t.Optional[int] = 93
     padding: t.Literal['longest', 'max_length'] = 'max_length'
+    max_seq_len: t.Optional[int] = field(kw_only=True, default=93)
 
     def __call__(self, sample: str | t.List[str] | t.Dict[str, t.Any] | LazyBatch) -> BatchEncoding:
         # Extract `text` from sample
@@ -49,12 +48,7 @@ class DataTokenize(object):
 @dataclass
 class DataTransform(object):
     tokenize: t.Callable[[t.List[str]], BatchEncoding]
-    emotion2label: t.Dict[str, int]
-    max_conv_len: int = 33
-    has_spans: bool = field(kw_only=True)
-    has_video: bool = field(kw_only=True)
-    has_causes: bool = field(kw_only=True)
-    has_emotions: bool = field(kw_only=True)
+    max_conv_len: int = field(kw_only=True, default=33)
 
     def __call__(self, sample: EmotionCauseConversation) -> EmotionCauseEncoding:
         emotion_causes = defaultdict(list)
@@ -81,16 +75,16 @@ class DataTransform(object):
         data['input_mask'] = jnp.asarray(input_mask)
 
         ### Perform label extraction ### 
-        if self.has_emotions:
+        if sample['has_emotions']:
             for utterance in sample['conversation']:
                 # Extract emotions as labels
-                emotion_labels.append(self.emotion2label.get(utterance.get('emotion', '')))
+                emotion_labels.append(utterance.get('emotion_label', 0))
 
             # Add padding for alignment
             emotion_labels = np.pad(emotion_labels, (0, self.max_conv_len - len(emotion_labels)))
             data['emotion_labels'] = emotion_labels
 
-        if self.has_causes:
+        if sample['has_causes']:
             for emotion_cause in sample.get('emotion-cause_pairs', []):
                 # Split emotion and cause
                 emotion, cause = emotion_cause
@@ -104,7 +98,7 @@ class DataTransform(object):
                 emotion_causes[utterance].append(cause)
 
                 # Extract span char index
-                if self.has_spans:
+                if sample['has_spans']:
                     span = cause_info[1]
                     source = sample['conversation'][cause]['text']
                     boc = source.find(span)
@@ -117,7 +111,7 @@ class DataTransform(object):
             cause_labels[causes] = 1
             data['cause_labels'] = jnp.asarray(cause_labels)
 
-        if self.has_spans:
+        if sample['has_spans']:
             boc_matrix = np.zeros((self.max_conv_len, self.max_conv_len), dtype=np.int64)
             eoc_matrix = np.zeros((self.max_conv_len, self.max_conv_len), dtype=np.int64)
 
@@ -136,18 +130,6 @@ class DataTransform(object):
             span_mask = (span_matrix != 0).astype(np.float32)
             data['span_mask'] = jnp.asarray(span_mask)
         return cast(EmotionCauseEncoding, frozen_dict.freeze(data))
-
-    @classmethod
-    def from_data(cls, data: ECACDataset, tokenize: t.Callable[[t.List[str]], BatchEncoding], max_conv_len: int = 33):
-        return cls(
-            tokenize=tokenize,
-            max_conv_len=max_conv_len,
-            emotion2label=data.emotion2label,
-            has_spans = data.split == 'train' and data.subtask == '1',
-            has_emotions = data.split == 'train',
-            has_causes = data.split == 'train',
-            has_video = data.subtask == '2',
-        )
 
 
 @dataclass

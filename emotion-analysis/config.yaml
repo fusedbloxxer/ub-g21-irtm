@@ -1,0 +1,21 @@
+# Task
+subtask: "1"
+
+# Training
+seed: 42
+batch_size: 32
+num_workers: 0
+prefetch_factor: null
+
+# Pretrained Model
+model_repo: "roberta-base"
+
+# Tokenization
+max_conv_len: 33
+max_uttr_len: 93
+
+# Paths
+rootdir: ".."
+
+# JAX settings
+gpu_memory: "preallocate"
