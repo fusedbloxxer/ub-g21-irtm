@@ -3,7 +3,7 @@ subtask: "1"
 
 # Training
 seed: 42
-batch_size: 32
+batch_size: 4
 num_workers: 0
 prefetch_factor: null
 

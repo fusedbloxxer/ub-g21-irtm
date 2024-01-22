@@ -144,28 +144,29 @@ class EmotionCauseTextModel(nn.Module):
 
         Args:
             input_ids (Array): (B, C, S)
-            attn_mask (Array): Attention mask of size (BxC, S) containing 1/0 markings.
-            training (bool): Changes internals such as dropout or normalization behavior.
+            attn_mask (Array): Attention mask of size (B, C, S) containing 1/0 markings.
+            train (bool): Changes internals such as dropout or normalization behavior.
 
         Returns:
-            Array: An embedding for each token/utterance/conversation: (B, C, S, H)
+            Array: An embedding for each utterance: (B, C, H)
         """
         # (B, C, S) -> (BxC, S)
-        B, C, S = input_ids.shape
+        B, C, _ = input_ids.shape
         input_ids = input_ids.reshape((-1, input_ids.shape[-1]))
         attn_mask = attn_mask.reshape((-1, attn_mask.shape[-1]))
 
-        # Compute embedding for each token using a pretrained text encoder
-        x = self.text_encoder(input_ids, attn_mask, deterministic=not train).last_hidden_state
+        # Extract pretrained embedding for [CLS] token for each utterance
+        x = self.text_encoder(input_ids, attn_mask, deterministic=not train).last_hidden_state[:, 0, :]
 
-        # (BxC, S) -> (B, C, S)
-        return jnp.reshape(x, (B, C, S, -1))
+        # (BxC, H) -> (B, C, H)
+        return jnp.reshape(x, (B, C, -1))
 
     def __call__(
         self,
         *,
         input_ids: Array,
-        attn_mask: Array,
+        uttr_attn_mask: Array,
+        conv_attn_mask: Array,
         train: bool,
     ) -> Array:
         """Classify utterances from a conversation into 7 emotion categories.
@@ -177,11 +178,11 @@ class EmotionCauseTextModel(nn.Module):
         Returns:
             Array: An array of probabilities for each utterance of shape (B, C, S, E)
         """
-        # (B, C, S) -> (B, C, S, H)
-        x = self.encode(input_ids=input_ids, attn_mask=attn_mask, train=train)
+        # Encode utterances individually: (B, C, S) -> (B, C, H)
+        x = self.encode(input_ids=input_ids, attn_mask=uttr_attn_mask, train=train)
 
-        # (B, C, S) -> (B, C, 1, S, S)
-        attn_mask = nn.make_attention_mask(attn_mask, attn_mask)
+        # Ignore padded conversations: (B, C) -> (B, 1, C, C)
+        attn_mask = nn.make_attention_mask(conv_attn_mask, conv_attn_mask)
 
         # Apply Transformer Layers
         x = self.transformer_layer(x, attn_mask, train=train)
