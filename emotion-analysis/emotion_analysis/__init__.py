@@ -1,18 +1,18 @@
-import os
-import sys
-import yaml
-import torch
-import random
-import mlflow
-import logging
 import argparse
-import numpy as np
+import logging
+import os
 import pathlib as pb
+import random
+import sys
+from logging import Formatter, StreamHandler
 from pathlib import Path
-from logging import StreamHandler, Formatter
+
+import mlflow
+import numpy as np
+import torch
+import yaml
 
 from .settings.config import EmotionAnalysisConfig
-
 
 # Setup script logging
 formatter = Formatter(fmt='[%(levelname)s]:%(message)s')
@@ -32,7 +32,7 @@ match config.gpu_memory:
         import jax; jax.numpy.zeros((1, 1))
     case 'on-demand':
         os.environ['XLA_PYTHON_CLIENT_ALLOCATOR'] = "platform"
-        import jax;
+        import jax
     case _:
         raise ValueError('invalid gpu_memory option: {}'.format(config.gpu_memory))
 

@@ -1,6 +1,7 @@
 import typing as t
 from dataclasses import dataclass
-from typing import Any, Callable
+from functools import partial
+from typing import Any, Callable, List
 
 import flax.linen as nn
 import jax
@@ -15,8 +16,8 @@ from transformers import (AutoConfig, AutoTokenizer, FlaxAutoModel,
 
 
 class PositionEmbeddings(nn.Module):
-    hidden_dim:  int
-    max_seq_len: int
+    hidden_dim:  int=768
+    max_seq_len: int=33
     n: int = 10_000
 
     def setup(self) -> None:
@@ -36,21 +37,21 @@ class PositionEmbeddings(nn.Module):
         pos_embeddings = jnp.asarray(pos_embeddings)
 
         # Init & retrieve pos_embeddings from a variable collection
-        self.variable('state', 'embeddings', lambda x: x, pos_embeddings)
+        self.param('embeddings', lambda _, x: x, pos_embeddings)
 
-    def __call__(self, x: Array) -> Array:
-        pos_embeddings: Array = self.get_variable('state', 'embeddings')
-        x = x + pos_embeddings[:x.shape[1], :]
+    def __call__(self, layer_in: Array) -> Array:
+        pos_embeddings: Array = self.get_variable('params', 'embeddings')
+        x = layer_in + pos_embeddings[:layer_in.shape[1], :]
         return x
 
 
 class TransformerLayer(nn.Module):
-    num_heads: int
-    embed_dim: int
-    input_dim: int
-    dense_dim: int 
-    drop_p: float
-    drop_a: float
+    num_heads: int=2
+    embed_dim: int=768
+    input_dim: int=768
+    dense_dim: int=768
+    drop_p: float=0.1
+    drop_a: float=0.1
     norm_eps: float = 1e-6
     activ_fn: Callable[[ArrayLike], Array] = gelu
 
@@ -80,15 +81,15 @@ class TransformerLayer(nn.Module):
 
     def __call__(
         self,
-        x: Array,
+        layer_in: Array,
         attn_mask: Array,
         train: bool,
     ) -> Array:
         # Self-Attention
-        attn_out: Array = self.attn_layer(x, x, x, deterministic=not train, mask=attn_mask)
+        attn_out: Array = self.attn_layer(layer_in, layer_in, layer_in, deterministic=not train, mask=attn_mask)
 
         # Add & Norm
-        x = x + self.drop_layer(attn_out, deterministic=not train)
+        x = layer_in + self.drop_layer(attn_out, deterministic=not train)
         x = self.norm_layer_1(x)
 
         # Feedforward MLP
@@ -106,8 +107,50 @@ class TransformerLayer(nn.Module):
 
 
 class TransformerEncoder(nn.Module):
-    num_layers: int
-    
+    num_layers: int=2
+    num_heads: int=2
+    embed_dim: int=768
+    input_dim: int=768
+    dense_dim: int=768
+    drop_p: float=0.1
+    drop_a: float=0.1
+    max_con_len: int=33 
+    norm_eps: float=1e-6
+    activ_fn: Callable[[ArrayLike], Array] = gelu
 
     def setup(self) -> None:
+        # Position embeddings used to encode the relative position of conversations
+        self.pos_embeddings = PositionEmbeddings(
+            hidden_dim=self.input_dim,
+            max_seq_len=self.max_con_len,
+        )
         
+        # All layers follow the same configuration
+        transformer_layer = partial(
+            TransformerLayer,
+            num_heads=self.num_heads,
+            embed_dim=self.embed_dim,
+            input_dim=self.input_dim,
+            dense_dim=self.dense_dim,
+            drop_p=self.drop_p,
+            drop_a=self.drop_a,
+            norm_eps=self.norm_eps,
+            activ_fn=self.activ_fn,
+        )
+
+        # Stack multiple transformer layers
+        self.layers: List[TransformerLayer] = [transformer_layer() for _ in range(self.num_layers)]
+
+    def __call__(
+        self,
+        layer_in: Array,
+        attn_mask: Array,
+        train: bool,
+    ) -> Array:
+        # Add Positional Embeddings
+        x = self.pos_embeddings(layer_in)        
+
+        # Apply multiple Transformer Layers
+        for layer in self.layers:
+            x = layer(x, attn_mask, train)
+        return x

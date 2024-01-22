@@ -1,34 +1,53 @@
+from typing import Callable
+
 import flax.linen as nn
 import jax.numpy as jnp
 from flax.linen.activation import gelu
 from jax import Array
+from jax.typing import ArrayLike
 
-from .modules import PositionEmbeddings, TransformerLayer
+from .modules import PositionEmbeddings, TransformerEncoder
 
 
 class EmotionCauseTextModel(nn.Module):
-    # Pretrained BERT Architecture
+    # Pretrained Transformer Architecture
     text_encoder: nn.Module
     # The number of emotions
-    num_classes: int
+    num_classes: int=7
+    # The number of Transformer layers
+    num_layers: int=2
+    # The number of attention heads in each layer
+    num_heads: int=2
+    # The embedding dim used per AttentionHead
+    embed_dim: int=768
+    # The input dim that a Transformer layer receives
+    input_dim: int=768
+    # The hidden dim of the inner MLP layer
+    dense_dim: int=768
+    # The dropout rate used in attention heads
+    drop_a: float=0.1
+    # The dropout rate used in-between layers
+    drop_p: float=0.1
+    # The eps value used by normalization layers
+    norm_eps: float=1e-6
+    # The activation function used in MLP layers
+    activ_fn: Callable[[ArrayLike], Array]=gelu
+    # The maximum conversation length to be processed
+    max_con_len: int=33
 
     def setup(self) -> None:
         """Model Architecture"""
-        self.pos_embeddings = PositionEmbeddings(
-            hidden_dim=768,
-            max_seq_len=93,
-            n=10_000,
-        )
-
-        self.transformer_layer = TransformerLayer(
-            num_heads=4,
-            embed_dim=768,
-            input_dim=768,
-            dense_dim=768,
-            drop_a=0.1,
-            drop_p=0.1,
-            norm_eps=1e-6,
-            activ_fn=gelu,
+        self.transformer = TransformerEncoder(
+            num_layers=self.num_layers,
+            num_heads=self.num_heads,
+            embed_dim=self.embed_dim,
+            input_dim=self.input_dim,
+            dense_dim=self.dense_dim,
+            drop_a=self.drop_a,
+            drop_p=self.drop_p,
+            norm_eps=self.norm_eps,
+            activ_fn=self.activ_fn,
+            max_con_len=self.max_con_len,
         )
 
         self.classifier = nn.Dense(
@@ -91,8 +110,7 @@ class EmotionCauseTextModel(nn.Module):
         attn_mask = nn.make_attention_mask(conv_attn_mask, conv_attn_mask)
 
         # Apply Transformer Layers
-        x = self.pos_embeddings(x)
-        x = self.transformer_layer(x, attn_mask, train=train)
+        x = self.transformer(x, attn_mask, train=train)
 
         # Apply classification layer
         x = self.classifier(x)

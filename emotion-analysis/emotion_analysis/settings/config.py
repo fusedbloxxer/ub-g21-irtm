@@ -17,6 +17,10 @@ class EmotionAnalysisConfig:
     num_workers: int
     prefetch_factor: int
 
+    # Model settings
+    learning_rate: float
+    finetune: Literal['full', 'freeze']
+
     # Pretrained Model
     model_repo: str
 
@@ -60,6 +64,8 @@ class EmotionAnalysisConfig:
         config['max_conv_len'] = yaml_config['max_conv_len']
         config['max_uttr_len'] = yaml_config['max_uttr_len']
         config['model_repo'] = yaml_config['model_repo']
+        config['learning_rate'] = yaml_config['learning_rate']
+        config['finetune'] = yaml_config['finetune']
 
         # Wrap settings
         return cls(**config)
