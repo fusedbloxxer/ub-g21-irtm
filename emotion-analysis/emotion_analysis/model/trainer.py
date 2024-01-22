@@ -7,16 +7,17 @@ import flax.linen as nn
 import jax.numpy as jnp
 import jax.random as jrm
 import optax
+from jax import jit, vmap, grad, value_and_grad
 from flax.training import train_state as ts
 from jax import Array
 from jax.typing import ArrayLike
-from flax.core import FrozenDict
+from flax.core import FrozenDict, freeze
 from flax.traverse_util import path_aware_map
 
 from .. import EmotionAnalysisConfig
 from .model import EmotionCauseTextModel
+from ..data.types import EmotionCauseEncoding
 from .pretrained import PretrainedTextModel, load_text_model
-
 
 
 @dataclass()
@@ -41,6 +42,7 @@ class TrainerModule(object):
         self.text_encoder = load_text_model(self.text_model_repo)
         self.model = EmotionCauseTextModel(text_encoder=self.text_encoder.module, num_classes=7)
         self.init_model()
+        self.jit_func()
 
     def init_model(self):
         # Generate fake data
@@ -52,22 +54,11 @@ class TrainerModule(object):
         params = self.model.init(rng_keys, **fake_data, train=True)['params']
         params['text_encoder'] = self.text_encoder.params
 
-        # Create optimizers
+        # Create optimizers for finetuning
         opt = self.create_optim(params)
 
         # Create train state
         self.state = ts.TrainState.create(apply_fn=self.model.apply, params=params, tx=opt)
-
-    def fake_input(self) -> Dict[str, Any]:
-        # Create fake data found in a batch
-        fake_input_ids = jnp.zeros((self.batch_size, self.max_conv_len, self.max_uttr_len))
-        fake_conv_attn_mask = jnp.zeros((self.batch_size, self.max_conv_len))
-        fake_uttr_attn_mask = jnp.zeros_like(fake_input_ids)
-        return dict(
-            input_ids=fake_input_ids,
-            uttr_attn_mask=fake_uttr_attn_mask,
-            conv_attn_mask=fake_conv_attn_mask,
-        )
 
     def create_optim(self, params: FrozenDict[str, Any]):
         # Create optimizer for trainable params
@@ -96,3 +87,61 @@ class TrainerModule(object):
             'frozen': frozen_opt,
         }, param_labels=param_labels)
         return opt
+
+    def fake_input(self) -> Dict[str, Any]:
+        # Create fake data found in a batch
+        fake_input_ids = jnp.zeros((self.batch_size, self.max_conv_len, self.max_uttr_len))
+        fake_conv_attn_mask = jnp.zeros((self.batch_size, self.max_conv_len))
+        fake_uttr_attn_mask = jnp.zeros_like(fake_input_ids)
+        return dict(
+            input_ids=fake_input_ids,
+            uttr_attn_mask=fake_uttr_attn_mask,
+            conv_attn_mask=fake_conv_attn_mask,
+        )
+
+    def jit_func(self):
+        def compute_loss(
+            key: Any,
+            params: FrozenDict,
+            state: ts.TrainState,
+            batch: EmotionCauseEncoding,
+        ):
+            # Data Input
+            data = {}
+            data['input_ids'] = batch['input_ids']
+            data['uttr_attn_mask'] = batch['uttr_attn_mask']
+            data['conv_attn_mask'] = batch['conv_attn_mask']
+            data = freeze(data)
+
+            # Forward pass
+            key, drop_key = jrm.split(key, 2)
+            logits = state.apply_fn({ 'params': params }, **data, train=True, rngs={ 'dropout': drop_key })
+
+            # Compute loss
+            assert 'emotion_labels' in batch
+            loss = optax.softmax_cross_entropy_with_integer_labels(logits, batch['emotion_labels'])
+            loss = jnp.mean(loss)
+            return loss, (key,)
+
+        def train_step(
+            key: Any,
+            state: ts.TrainState,
+            batch: EmotionCauseEncoding
+        ):
+            # Compute gradient using backprop
+            loss_fn = lambda params: compute_loss(key, params, state, batch)
+            ret, grads = value_and_grad(loss_fn, has_aux=True)(state.params)
+            loss, key = ret[0], *ret[1]
+            state = state.apply_gradients(grads=grads)
+            return loss, key, state
+        self.train_step = jit(train_step)
+
+        def eval_step(
+            key: Any,
+            state: ts.TrainState,
+            batch: EmotionCauseEncoding,
+        ):
+            loss_fn = lambda params: compute_loss(key, params, state, batch)
+            loss, (key,) = loss_fn(state.params)
+            return loss
+        self.eval_step = jit(eval_step)

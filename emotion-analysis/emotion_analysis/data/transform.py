@@ -65,14 +65,14 @@ class DataTransform(object):
         input_ids = np.pad(encoding.data['input_ids'], ((0, pad_len), (0, 0)))
         data['input_ids'] = jnp.asarray(input_ids)
         attn_mask = np.pad(encoding.data['attention_mask'], ((0, pad_len), (0, 0)))
-        data['attention_mask'] = jnp.asarray(attn_mask)
+        data['uttr_attn_mask'] = jnp.asarray(attn_mask)
         offset = np.pad(encoding.data['offset_mapping'], ((0, pad_len), (0, 0), (0, 0)))
         data['offset_mapping'] = jnp.asarray(offset)
 
         # Create input mask to distinguish data from padding
         input_mask = np.zeros(self.max_conv_len, dtype=np.float32)
         input_mask[:len(sample['conversation'])] = 1
-        data['input_mask'] = jnp.asarray(input_mask)
+        data['conv_attn_mask'] = jnp.asarray(input_mask)
 
         ### Perform label extraction ### 
         if sample['has_emotions']:

@@ -2259,24 +2259,24 @@ tests = ["pytest", "pytest-cov", "pytest-pep8"]
 
 [[package]]
 name = "optax"
-version = "0.1.7"
+version = "0.1.8"
 description = "A gradient processing and optimisation library in JAX."
 optional = false
 python-versions = ">=3.8"
 files = [
-    {file = "optax-0.1.7-py3-none-any.whl", hash = "sha256:2b85115f2ae7adafe5fd9abf4b275e53057765361511c8ccc868e70158458494"},
-    {file = "optax-0.1.7.tar.gz", hash = "sha256:6a5a848bc5e55e619b187c749fdddc4a5443ea14be85cc769f995779865c110d"},
+    {file = "optax-0.1.8-py3-none-any.whl", hash = "sha256:9a76a895511a1d9b50078c55e9fffd7f095e5e947d4c804eead7f3dc51c5c270"},
+    {file = "optax-0.1.8.tar.gz", hash = "sha256:86820fba48c564bd6772be4f168895cdad8d8b75e45fc414e63ccfc223628c34"},
 ]
 
 [package.dependencies]
 absl-py = ">=0.7.1"
-chex = ">=0.1.5"
+chex = ">=0.1.7"
 jax = ">=0.1.55"
 jaxlib = ">=0.1.37"
 numpy = ">=1.18.0"
 
 [package.extras]
-docs = ["IPython (==7.16.3)", "dm-haiku (==0.0.8)", "docutils (==0.16)", "ipykernel (==5.3.4)", "matplotlib (==3.5.0)", "myst_nb (==0.13.1)", "pandoc (==1.0.2)", "sphinx (==4.5.0)", "sphinx-autodoc-typehints (==1.11.1)", "sphinx-book-theme (==0.3.3)", "sphinxcontrib-bibtex (==2.4.2)", "sphinxcontrib-katex (==0.9.0)"]
+docs = ["dm-haiku (>=0.0.11)", "ipython (>=8.8.0)", "matplotlib (>=3.5.0)", "myst-nb (>=1.0.0)", "sphinx (>=6.0.0)", "sphinx-autodoc-typehints", "sphinx-book-theme (>=1.0.1)", "sphinx-collections (>=0.0.1)", "sphinx-gallery (>=0.14.0)", "sphinxcontrib-katex", "tensorflow (>=2.4.0)", "tensorflow-datasets (>=4.2.0)"]
 dp-accounting = ["absl-py (>=1.0.0)", "attrs (>=21.4.0)", "mpmath (>=1.2.1)", "numpy (>=1.21.4)", "scipy (>=1.7.1)"]
 examples = ["dm-haiku (>=0.0.3)", "tensorflow (>=2.4.0)", "tensorflow-datasets (>=4.2.0)"]
 test = ["dm-haiku (>=0.0.3)", "dm-tree (>=0.1.7)", "flax (==0.5.3)"]

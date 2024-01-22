@@ -70,8 +70,8 @@ ECACData = List[EmotionCauseConversation]
 class EmotionCauseEncoding(TypedDict):
     # Data
     input_ids: Array
-    input_mask: Array
-    attention_mask: Array
+    conv_attn_mask: Array
+    uttr_attn_mask: Array
     offset_mapping: Array
 
     # Labels
