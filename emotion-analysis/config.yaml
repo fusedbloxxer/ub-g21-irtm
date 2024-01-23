@@ -3,13 +3,13 @@ subtask: "1"
 
 # Training
 seed: 42
-batch_size: 6
+batch_size: 16
 num_workers: 0
 prefetch_factor: null
 
 # Model settings
-learning_rate: 2e-4
-finetune: full
+learning_rate: !!float 2e-4
+finetune: frozen
 
 # Pretrained Model
 model_repo: "roberta-base"

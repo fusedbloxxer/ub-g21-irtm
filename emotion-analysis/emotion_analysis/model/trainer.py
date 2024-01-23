@@ -107,11 +107,10 @@ class TrainerModule(object):
             batch: EmotionCauseEncoding,
         ):
             # Data Input
-            data = {}
+            data: Dict[str, Array] = {}
             data['input_ids'] = batch['input_ids']
             data['uttr_attn_mask'] = batch['uttr_attn_mask']
             data['conv_attn_mask'] = batch['conv_attn_mask']
-            data = freeze(data)
 
             # Forward pass
             key, drop_key = jrm.split(key, 2)
@@ -120,8 +119,9 @@ class TrainerModule(object):
             # Compute loss
             assert 'emotion_labels' in batch
             loss = optax.softmax_cross_entropy_with_integer_labels(logits, batch['emotion_labels'])
+            loss = loss * data['conv_attn_mask']
             loss = jnp.mean(loss)
-            return loss, (key,)
+            return loss, (logits, key)
 
         def train_step(
             key: Any,
@@ -131,9 +131,9 @@ class TrainerModule(object):
             # Compute gradient using backprop
             loss_fn = lambda params: compute_loss(key, params, state, batch)
             ret, grads = value_and_grad(loss_fn, has_aux=True)(state.params)
-            loss, key = ret[0], *ret[1]
+            loss, logits, key = ret[0], *ret[1]
             state = state.apply_gradients(grads=grads)
-            return loss, key, state
+            return loss, logits, key, state
         self.train_step = jit(train_step)
 
         def eval_step(
@@ -142,6 +142,7 @@ class TrainerModule(object):
             batch: EmotionCauseEncoding,
         ):
             loss_fn = lambda params: compute_loss(key, params, state, batch)
-            loss, (key,) = loss_fn(state.params)
-            return loss
+            loss, aux = loss_fn(state.params)
+            logits, key = aux[0], aux[1] 
+            return loss, logits, key, state
         self.eval_step = jit(eval_step)
