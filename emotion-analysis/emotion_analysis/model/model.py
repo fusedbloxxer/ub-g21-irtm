@@ -2,11 +2,11 @@ from typing import Callable
 
 import flax.linen as nn
 import jax.numpy as jnp
-from flax.linen.activation import gelu
+from flax.linen.activation import relu
 from jax import Array
 from jax.typing import ArrayLike
 
-from .modules import PositionEmbeddings, TransformerEncoder
+from .modules import TransformerEncoder
 
 
 class EmotionCauseTextModel(nn.Module):
@@ -17,7 +17,7 @@ class EmotionCauseTextModel(nn.Module):
     # The number of Transformer layers
     num_layers: int=2
     # The number of attention heads in each layer
-    num_heads: int=2
+    num_heads: int=4
     # The embedding dim used per AttentionHead
     embed_dim: int=768
     # The input dim that a Transformer layer receives
@@ -25,13 +25,13 @@ class EmotionCauseTextModel(nn.Module):
     # The hidden dim of the inner MLP layer
     dense_dim: int=768
     # The dropout rate used in attention heads
-    drop_a: float=0.1
+    drop_a: float=0.2
     # The dropout rate used in-between layers
-    drop_p: float=0.1
+    drop_p: float=0.2
     # The eps value used by normalization layers
     norm_eps: float=1e-6
     # The activation function used in MLP layers
-    activ_fn: Callable[[ArrayLike], Array]=gelu
+    activ_fn: Callable[[ArrayLike], Array]=relu
     # The maximum conversation length to be processed
     max_con_len: int=33
 
@@ -81,7 +81,7 @@ class EmotionCauseTextModel(nn.Module):
         attn_mask = attn_mask.reshape((-1, attn_mask.shape[-1]))
 
         # Extract pretrained embedding for [CLS] token for each utterance
-        x = self.text_encoder(input_ids, attn_mask, deterministic=not train).last_hidden_state[:, 0, :]
+        x = self.text_encoder(input_ids, attn_mask, deterministic=not train).last_hidden_state.mean(axis=1)
 
         # (BxC, H) -> (B, C, H)
         return jnp.reshape(x, (B, C, -1))

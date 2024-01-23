@@ -3,7 +3,7 @@ subtask: "1"
 
 # Training
 seed: 42
-batch_size: 16
+batch_size: 32
 num_workers: 0
 prefetch_factor: null
 
@@ -12,7 +12,7 @@ learning_rate: !!float 2e-4
 finetune: frozen
 
 # Pretrained Model
-model_repo: "roberta-base"
+model_repo: "cardiffnlp/twitter-roberta-base-emotion"
 
 # Tokenization
 max_conv_len: 33

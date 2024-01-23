@@ -74,9 +74,9 @@ class TrainerModule(object):
         # Create param labels
         match self.finetune:
             case   'full':
-                is_trainable = lambda *_: 'trainable'
+                is_trainable = lambda p, _: 'frozen' if 'pos_embeddings' in p else 'trainable'
             case 'frozen':
-                is_trainable = lambda p, _: 'frozen' if 'text_encoder' in p else 'trainable'
+                is_trainable = lambda p, _: 'frozen' if 'text_encoder' in p or 'pos_embeddings' in p else 'trainable'
             case _:
                 raise ValueError('invalid finetune option: {}'.format(self.finetune))
         param_labels = path_aware_map(is_trainable, params)

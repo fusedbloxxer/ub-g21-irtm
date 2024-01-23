@@ -124,7 +124,7 @@ class TransformerEncoder(nn.Module):
             hidden_dim=self.input_dim,
             max_seq_len=self.max_con_len,
         )
-        
+
         # All layers follow the same configuration
         transformer_layer = partial(
             TransformerLayer,
