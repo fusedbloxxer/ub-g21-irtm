@@ -80,7 +80,7 @@ class EmotionCauseTextModel(nn.Module):
         input_ids = input_ids.reshape((-1, input_ids.shape[-1]))
         attn_mask = attn_mask.reshape((-1, attn_mask.shape[-1]))
 
-        # Extract pretrained embedding for [CLS] token for each utterance
+        # Extract pretrained embedding for each utterance
         x = self.text_encoder(input_ids, attn_mask, deterministic=not train).last_hidden_state.mean(axis=1)
 
         # (BxC, H) -> (B, C, H)
