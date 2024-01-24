@@ -4,6 +4,7 @@ from typing import Literal
 from yaml import safe_load
 
 from ..data.types import SubTask
+from ..model.finetune import FineTune
 
 
 @dataclass
@@ -19,7 +20,7 @@ class EmotionAnalysisConfig:
 
     # Model settings
     learning_rate: float
-    finetune: Literal['full', 'freeze']
+    finetune: FineTune
 
     # Pretrained Model
     model_repo: str
@@ -59,7 +60,7 @@ class EmotionAnalysisConfig:
         config['ckpt_dir'] = config['root_dir'] / 'ckpt'
         config['cache_dir'] = config['root_dir'] / 'cache'
         config['gpu_memory'] = yaml_config['gpu_memory']
-        config['tracking_uri'] = f"file://{config['log_dir']}/mlflow"
+        config['tracking_uri'] = f"file://{config['log_dir'].absolute()}/mlflow"
         config['subtask'] = yaml_config['subtask']
         config['max_conv_len'] = yaml_config['max_conv_len']
         config['max_uttr_len'] = yaml_config['max_uttr_len']

@@ -1,7 +1,7 @@
 import typing as t
 from dataclasses import dataclass
 from functools import partial
-from typing import Any, Callable, List
+from typing import Any, Callable, List, Tuple, Dict, Literal
 
 import flax.linen as nn
 import jax
@@ -154,3 +154,49 @@ class TransformerEncoder(nn.Module):
         for layer in self.layers:
             x = layer(x, attn_mask, train)
         return x
+
+
+class TransformerClassifier(nn.Module):
+    num_classes: int
+    num_layers: int=2
+    num_heads: int=2
+    embed_dim: int=768
+    input_dim: int=768
+    dense_dim: int=768
+    drop_p: float=0.1
+    drop_a: float=0.1
+    max_con_len: int=33 
+    norm_eps: float=1e-6
+    activ_fn: Callable[[ArrayLike], Array] = gelu
+
+    def setup(self) -> None:
+        self.transformer = TransformerEncoder(
+            num_layers=self.num_layers,
+            num_heads=self.num_heads,
+            embed_dim=self.embed_dim,
+            input_dim=self.input_dim,
+            dense_dim=self.dense_dim,
+            drop_a=self.drop_a,
+            drop_p=self.drop_p,
+            norm_eps=self.norm_eps,
+            activ_fn=self.activ_fn,
+            max_con_len=self.max_con_len,
+        )
+
+        self.classifier = nn.Dense(
+            features=self.num_classes,
+            kernel_init=nn.initializers.glorot_normal(),
+            bias_init=nn.initializers.zeros_init(),
+            name='classifier',
+            use_bias=True,
+        )
+
+    def __call__(
+        self,
+        layer_in: Array,
+        attn_mask: Array,
+        train: bool
+    ) -> Dict[Literal['out', 'hidden'], Array]:
+        hidden = self.transformer(layer_in, attn_mask, train)
+        out = self.classifier(hidden)
+        return { 'out': out, 'hidden': hidden }

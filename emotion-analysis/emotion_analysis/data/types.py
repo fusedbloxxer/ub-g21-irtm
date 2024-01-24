@@ -1,7 +1,8 @@
-from typing import TypedDict, Optional, List, Tuple, Literal, TypeAlias, NotRequired
+from typing import TypedDict, Sequence, Optional, List, Dict, Tuple, Literal, TypeAlias, NotRequired
 from dataclasses import dataclass
 from pathlib import Path
 from jax import Array
+import numpy as np
 
 
 # The competition consiers two tasks
@@ -38,6 +39,11 @@ Emotion: TypeAlias = Literal[
 ]
 
 
+DataStats = TypedDict('DataStats', {
+    'emotion_labels': List[int],
+})
+
+
 # Common Dataset Types
 EmotionCauseUtterance = TypedDict('EmotionCauseUtterance', {
     # From JSON
@@ -72,7 +78,6 @@ class EmotionCauseEncoding(TypedDict):
     input_ids: Array
     conv_attn_mask: Array
     uttr_attn_mask: Array
-    offset_mapping: Array
 
     # Labels
     cause_mask: NotRequired[Array]
@@ -80,3 +85,5 @@ class EmotionCauseEncoding(TypedDict):
     cause_labels: NotRequired[Array]
     emotion_labels: NotRequired[Array]
 
+    # Weights for imbalanced data
+    emotion_weight: NotRequired[Array]

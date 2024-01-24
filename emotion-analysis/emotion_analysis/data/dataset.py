@@ -1,15 +1,16 @@
-from typing import Any, TypedDict, Optional, List, Literal, Dict, Tuple, cast
+from typing import Any, TypedDict, Optional, List, Literal, Dict, Tuple, cast, Sequence
 from torch.utils.data import Dataset
 from collections import namedtuple
 from dataclasses import dataclass
 from pathlib import Path
 import pathlib as pb
+import numpy as np
 import json
 import re
 
 from .types import Emotion, SubTask, DataSplit
 from .types import EmotionCauseConversation
-from .types import ECACData
+from .types import ECACData, DataStats
 
 
 class ECACDataset(Dataset):
@@ -80,6 +81,18 @@ class ECACDataset(Dataset):
     def label2emotion(self) -> Dict[int, str]:
         return self.__label2emotion
 
+    @property
+    def stats(self) -> DataStats:
+        return self._stats
+
+    @property
+    def emotion_labels(self) -> Sequence[int]:
+        return self._stats['emotion_labels']
+
+    @property
+    def samples_per_emotion(self) -> np.ndarray:
+        return np.bincount(self.emotion_labels)
+
     def __getitem__(self, index: int) -> EmotionCauseConversation:
         sample = self.__data[index]
 
@@ -92,6 +105,11 @@ class ECACDataset(Dataset):
         # Read raw dataset
         with open(self.__metadata_path, 'r') as dataset_file:
             self.__data: ECACData = json.load(dataset_file)
+
+        # Track Statistics
+        self._stats: DataStats = {
+            'emotion_labels': [],
+        }
 
         # Inject missing values
         for sample in self.__data:
@@ -109,9 +127,16 @@ class ECACDataset(Dataset):
                     utterance['video_path'] = self.__video_dir_path / video_name
                     utterance['video_name'] = video_name
 
-                # Inject emotion as label
-                if self.split == 'train' and 'emotion' in utterance:
+                # Skip non-train examples
+                if self.split != 'train':
+                    continue
+
+                if 'emotion' in utterance:
+                    # Inject emotion as label
                     utterance['emotion_label'] = self.emotion2label[utterance['emotion']]
+
+                    # Increment for each sample found
+                    self._stats['emotion_labels'].append(utterance['emotion_label'])
 
     @classmethod
     def read_data(cls, data_dir: pb.Path, subtask: SubTask) -> Dict[DataSplit, 'ECACDataset']:

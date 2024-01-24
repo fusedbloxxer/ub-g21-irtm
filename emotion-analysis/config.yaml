@@ -2,14 +2,14 @@
 subtask: "1"
 
 # Training
-seed: 42
-batch_size: 16
+seed: 88
+batch_size: 32
 num_workers: 0
 prefetch_factor: null
 
 # Model settings
 learning_rate: !!float 2e-4
-finetune: frozen
+finetune: head
 
 # Pretrained Model
 model_repo: "cardiffnlp/twitter-roberta-base-emotion"

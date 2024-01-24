@@ -1,24 +1,44 @@
 import typing as t
-from typing import Any, cast
-from jax import Array, vmap, jit
-import jax.numpy as jnp
-import numpy as np
-from pandas import DataFrame
-from dataclasses import dataclass, field
-import flax.core.frozen_dict as frozen_dict
-from transformers import BatchEncoding, PreTrainedTokenizerFast
-from datasets.formatting.formatting import LazyBatch
+from abc import ABC, abstractmethod
 from collections import defaultdict
+from dataclasses import dataclass, field
 from functools import partial
 from itertools import chain
+from typing import Any, Callable, Generic, TypeVar, cast
+
+import flax.core.frozen_dict as frozen_dict
+import jax.numpy as jnp
+import numpy as np
+from datasets.formatting.formatting import LazyBatch
+from jax import Array, jit, vmap
+from pandas import DataFrame
+from transformers import BatchEncoding, PreTrainedTokenizerFast
 
 from .dataset import ECACDataset
-from .types import EmotionCauseEncoding
-from .types import EmotionCauseConversation
+from ..utils.weight import ClassWeight
+from .types import EmotionCauseConversation, EmotionCauseEncoding
+
+T_in = TypeVar('T_in')
+T_out = TypeVar('T_out')
 
 
 @dataclass
-class DataTokenize(object):
+class Transform(Generic[T_in, T_out], ABC):
+    @abstractmethod
+    def __call__(self, input_: T_in) -> T_out:
+        raise NotImplementedError()
+
+    @staticmethod
+    def chain(*transforms: 'Transform') -> 'Transform[T_in, T_out]':
+        def apply_chain(data):
+            for transform in transforms:
+                data = transform(data)
+            return data
+        return cast(Any, apply_chain)
+
+
+@dataclass
+class TokenizeTransform(Transform[str | t.List[str] | t.Dict[str, t.Any] | LazyBatch, BatchEncoding]):
     tokenizer: PreTrainedTokenizerFast
     padding: t.Literal['longest', 'max_length'] = 'max_length'
     max_seq_len: t.Optional[int] = field(kw_only=True, default=93)
@@ -40,13 +60,12 @@ class DataTokenize(object):
             return_tensors='np',
             add_special_tokens=True,
             return_attention_mask=True,
-            return_offsets_mapping=True,
             max_length=self.max_seq_len,
         )
 
 
 @dataclass
-class DataTransform(object):
+class EncodeTransform(Transform[EmotionCauseConversation, EmotionCauseEncoding]):
     tokenize: t.Callable[[t.List[str]], BatchEncoding]
     max_conv_len: int = field(kw_only=True, default=33)
 
@@ -66,11 +85,9 @@ class DataTransform(object):
         data['input_ids'] = jnp.asarray(input_ids)
         attn_mask = np.pad(encoding.data['attention_mask'], ((0, pad_len), (0, 0)))
         data['uttr_attn_mask'] = jnp.asarray(attn_mask)
-        offset = np.pad(encoding.data['offset_mapping'], ((0, pad_len), (0, 0), (0, 0)))
-        data['offset_mapping'] = jnp.asarray(offset)
 
         # Create input mask to distinguish data from padding
-        input_mask = np.zeros(self.max_conv_len, dtype=np.float32)
+        input_mask = np.zeros(self.max_conv_len, dtype=np.int32)
         input_mask[:len(sample['conversation'])] = 1
         data['conv_attn_mask'] = jnp.asarray(input_mask)
 
@@ -126,15 +143,24 @@ class DataTransform(object):
 
             # Concatenate them
             span_matrix = np.stack((boc_matrix, eoc_matrix), axis=0)
-            data['cause_span'] = jnp.asarray(span_matrix)
-            span_mask = (span_matrix != 0).astype(np.float32)
-            data['span_mask'] = jnp.asarray(span_mask)
-        return cast(EmotionCauseEncoding, frozen_dict.freeze(data))
+            data['span_mask'] = jnp.asarray(span_matrix != 0, np.float32)
+            data['cause_span'] = jnp.asarray(span_matrix, np.int32)
+        return cast(EmotionCauseEncoding, data)
 
 
 @dataclass
-class DataCollator(object):
-    transform: DataTransform
+class WeightTransform(Transform[EmotionCauseEncoding, EmotionCauseEncoding]):
+    class_weight: ClassWeight
+
+    def __call__(self, input_: EmotionCauseEncoding) -> EmotionCauseEncoding:
+        if 'emotion_labels' in input_:
+            input_['emotion_weight'] = jnp.asarray(self.class_weight(input_['emotion_labels']))
+        return input_
+
+
+@dataclass
+class CollateTransform(Transform[t.List[EmotionCauseConversation], EmotionCauseEncoding]):
+    transform: Transform[EmotionCauseConversation, EmotionCauseEncoding]
 
     def __call__(self, samples: t.List[EmotionCauseConversation]) -> EmotionCauseEncoding:
         assert len(samples) >= 1, 'the passed-in argument must contain at least one sample'

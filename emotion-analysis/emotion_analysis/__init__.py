@@ -40,7 +40,8 @@ match config.gpu_memory:
 os.environ['HF_HOME'] = str(config.cache_dir / 'huggingface')
 
 # Setup MLFlow logging
-mlflow.set_tracking_uri(uri=config.tracking_uri)
+mlflow.set_tracking_uri(uri='http://127.0.0.1:8080/')
+mlflow.set_experiment('development')
 
 # Environment:
 print('JAX Backend: ', jax.default_backend())

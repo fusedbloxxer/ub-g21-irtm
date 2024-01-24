@@ -1,22 +1,27 @@
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, Literal
+from typing import Any, Dict, List, Literal
 
+import evaluate
 import flax
 import flax.linen as nn
 import jax.numpy as jnp
 import jax.random as jrm
+import mlflow
 import optax
-from jax import jit, vmap, grad, value_and_grad
-from flax.training import train_state as ts
-from jax import Array
-from jax.typing import ArrayLike
 from flax.core import FrozenDict, freeze
+from flax.training import train_state as ts
 from flax.traverse_util import path_aware_map
+from jax import Array, grad, jit, value_and_grad, vmap
+from jax.typing import ArrayLike
+from torch.utils.data import DataLoader
+from tqdm import tqdm, trange
 
 from .. import EmotionAnalysisConfig
-from .model import EmotionCauseTextModel
+from .metrics import MeanMetric, F1Metric
 from ..data.types import EmotionCauseEncoding
+from .finetune import FineTune, FineTuneStrategy, ParamLabel
+from .model import EmotionCauseTextModel
 from .pretrained import PretrainedTextModel, load_text_model
 
 
@@ -35,12 +40,12 @@ class TrainerModule(object):
     # Learning rate
     learning_rate: float
     # Finetune method
-    finetune: Literal['full', 'freeze']
+    finetune: FineTune
 
     def __post_init__(self):
         # Create and init the model using a pretrained architecture
         self.text_encoder = load_text_model(self.text_model_repo)
-        self.model = EmotionCauseTextModel(text_encoder=self.text_encoder.module, num_classes=7)
+        self.model = EmotionCauseTextModel(text_encoder=self.text_encoder.module, num_emotions=7)
         self.init_model()
         self.jit_func()
 
@@ -55,36 +60,34 @@ class TrainerModule(object):
         params['text_encoder'] = self.text_encoder.params
 
         # Create optimizers for finetuning
-        opt = self.create_optim(params)
+        opt = self.init_optim(params)
 
         # Create train state
         self.state = ts.TrainState.create(apply_fn=self.model.apply, params=params, tx=opt)
 
-    def create_optim(self, params: FrozenDict[str, Any]):
-        # Create optimizer for trainable params
+        # Create reusable metrics
+        self.init_metrics()
+
+    def init_metrics(self):
+        self.train_loss = MeanMetric()
+        self.valid_loss = MeanMetric()
+        self.train_f1 = F1Metric('weighted')
+        self.valid_f1 = F1Metric('weighted')
+
+    def init_optim(self, params: FrozenDict[str, Any]):
+        # Create trainable & no-op optimizers
         train_sch =  optax.constant_schedule(value=self.learning_rate)
+        frozen_opt = optax.set_to_zero()
         train_opt = optax.chain(
             optax.clip_by_global_norm(1.0),
             optax.adamw(learning_rate=train_sch),
         )
 
-        # Create dummy optimizer for no-op frozen params
-        frozen_opt = optax.set_to_zero()
-
-        # Create param labels
-        match self.finetune:
-            case   'full':
-                is_trainable = lambda p, _: 'frozen' if 'pos_embeddings' in p else 'trainable'
-            case 'frozen':
-                is_trainable = lambda p, _: 'frozen' if 'text_encoder' in p or 'pos_embeddings' in p else 'trainable'
-            case _:
-                raise ValueError('invalid finetune option: {}'.format(self.finetune))
-        param_labels = path_aware_map(is_trainable, params)
-
-        # Optimize only the trainable params
+        # Create param labels for trainable and frozem params
+        param_labels = FineTuneStrategy.from_enum(self.finetune).param_labels(params)
         opt = optax.multi_transform({
-            'trainable': train_opt,
-            'frozen': frozen_opt,
+            ParamLabel.TRAINABLE: train_opt,
+            ParamLabel.FROZEN: frozen_opt,
         }, param_labels=param_labels)
         return opt
 
@@ -105,6 +108,7 @@ class TrainerModule(object):
             params: FrozenDict,
             state: ts.TrainState,
             batch: EmotionCauseEncoding,
+            train: bool,
         ):
             # Data Input
             data: Dict[str, Array] = {}
@@ -114,13 +118,18 @@ class TrainerModule(object):
 
             # Forward pass
             key, drop_key = jrm.split(key, 2)
-            logits = state.apply_fn({ 'params': params }, **data, train=True, rngs={ 'dropout': drop_key })
+            output = state.apply_fn({ 'params': params }, **data, train=train, rngs={ 'dropout': drop_key })
+            logits = output['emotion']['out']
 
             # Compute loss
-            assert 'emotion_labels' in batch
+            assert 'emotion_labels' in batch and 'emotion_weight' in batch
             loss = optax.softmax_cross_entropy_with_integer_labels(logits, batch['emotion_labels'])
-            loss = loss * data['conv_attn_mask']
-            loss = jnp.mean(loss)
+
+            # Normalized loss weight for unmasked entries
+            weight: Array = batch['conv_attn_mask'] # * batch['emotion_weight']
+
+            # Per-batch loss
+            loss = jnp.mean(loss * weight)
             return loss, (logits, key)
 
         def train_step(
@@ -128,11 +137,17 @@ class TrainerModule(object):
             state: ts.TrainState,
             batch: EmotionCauseEncoding
         ):
-            # Compute gradient using backprop
-            loss_fn = lambda params: compute_loss(key, params, state, batch)
-            ret, grads = value_and_grad(loss_fn, has_aux=True)(state.params)
-            loss, logits, key = ret[0], *ret[1]
+            # Wrap loss function
+            loss_fn = lambda params: compute_loss(key, params, state, batch, True)
+
+            # Compute loss & gradients
+            val, grads = value_and_grad(loss_fn, has_aux=True)(state.params)
+            loss, logits, key = val[0], *val[1]
+
+            # Update the model and optimizers
             state = state.apply_gradients(grads=grads)
+
+            # Return the new state
             return loss, logits, key, state
         self.train_step = jit(train_step)
 
@@ -141,8 +156,68 @@ class TrainerModule(object):
             state: ts.TrainState,
             batch: EmotionCauseEncoding,
         ):
-            loss_fn = lambda params: compute_loss(key, params, state, batch)
+            # Wrap loss function
+            loss_fn = lambda params: compute_loss(key, params, state, batch, False)
+
+            # Compute loss & gradients
             loss, aux = loss_fn(state.params)
             logits, key = aux[0], aux[1] 
+
+            # Return the new state
             return loss, logits, key, state
         self.eval_step = jit(eval_step)
+
+    def train_epoch(self, epoch: int, dataloader: DataLoader[EmotionCauseEncoding]) -> None:
+        for batch in tqdm(dataloader, desc=f'[train][epoch: {epoch}]'):
+            batch: EmotionCauseEncoding
+            assert 'emotion_labels' in batch, 'no emotion labels were found during validation'
+
+            # Forward and backward pass for one batch
+            loss, logits, self.key, self.state = self.train_step(self.key, self.state, batch)
+
+            # Compute emotion predictions
+            conv_mask = batch['conv_attn_mask'].astype(bool)
+            pred = logits[conv_mask, :].argmax(axis=1)
+            refs = batch['emotion_labels'][conv_mask]
+
+            # Update metrics
+            self.train_loss.update(loss)
+            self.train_f1.update(predictions=pred, references=refs)
+        mlflow.log_metric(key='train_loss', value=self.train_loss.compute(), step=epoch)
+        mlflow.log_metric(key='train_f1', value=self.train_f1.compute(), step=epoch)
+
+    def valid_epoch(self, epoch: int, dataloader: DataLoader[EmotionCauseEncoding]) -> None:
+        for batch in tqdm(dataloader, desc=f'[eval]'):
+            batch: EmotionCauseEncoding
+            assert 'emotion_labels' in batch, 'no emotion labels were found during validation'
+
+            # Forward pass for one batch
+            loss, logits, self.key, _ = self.eval_step(self.key, self.state, batch)
+
+            # Compute emotion predictions
+            conv_mask = batch['conv_attn_mask'].astype(bool)
+            pred = logits[conv_mask, :].argmax(axis=1)
+            refs = batch['emotion_labels'][conv_mask]
+
+            # Update metrics
+            self.valid_loss.update(loss)
+            self.valid_f1.update(predictions=pred, references=refs)
+        mlflow.log_metric(key='valid_loss', value=self.valid_loss.compute(), step=epoch)
+        mlflow.log_metric(key='valid_f1', value=self.valid_f1.compute(), step=epoch)
+
+    def train(
+        self,
+        *,
+        train_dataloader: DataLoader[EmotionCauseEncoding],
+        valid_dataloader: DataLoader[EmotionCauseEncoding],
+        tags: Dict[str, Any] = {},
+        num_epochs: int = 10,
+    ) -> None:
+        with mlflow.start_run():
+            # Add tags
+            mlflow.set_tags(tags)
+
+            # Perform train & valid at each step
+            for epoch in trange(num_epochs, desc='[training]'):
+                self.train_epoch(epoch, train_dataloader)
+                self.valid_epoch(epoch, valid_dataloader)
