@@ -1,3 +1,4 @@
+from collections import defaultdict
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Literal, cast
@@ -8,6 +9,7 @@ import flax.linen as nn
 import jax.numpy as jnp
 import jax.random as jrm
 import mlflow
+import numpy as np
 import optax
 from flax.core import FrozenDict, freeze
 from flax.training import train_state as ts
@@ -163,7 +165,7 @@ class TrainerModule(object):
             key, drop_key = jrm.split(key, 2)
             output = state.apply_fn({ 'params': params }, **data, train=train, rngs={ 'dropout': drop_key })
 
-            # Compute span weight only
+            # Compute span weight only TODO: move make_attn into transform (precumpute masks)
             conv_attn_mask = nn.make_attention_mask(batch['conv_attn_mask'], batch['conv_attn_mask']).squeeze(axis=1)
             span_start_loss = conv_attn_mask * cross_entropy(output['ec_table']['span_start'], batch['cause_span'][..., 0])
             span_stop_loss = conv_attn_mask * cross_entropy(output['ec_table']['span_stop'], batch['cause_span'][..., 1])
@@ -287,7 +289,26 @@ class TrainerModule(object):
         dataloader,
     ):
         results = []
+
         for batch in tqdm(dataloader, desc='inference'):
+            # Perform inference
             output = self.forward(self.state, batch)
-            results.append(output)
+            span_mask = nn.make_attention_mask(batch['conv_attn_mask'], batch['conv_attn_mask']).squeeze(1).astype(bool)
+
+            for entry in range(batch['input_ids'].shape[0]):
+                pred = {}
+                pred['emotion'] = output['emotion'][entry, batch['conv_attn_mask'][entry].astype(bool)]
+                pred['cause'] = output['cause'][entry, batch['conv_attn_mask'][entry].astype(bool)]
+                C = np.sqrt(output['span_start'][entry][span_mask[entry]].shape[0]).astype(int)
+                span_start = output['span_start'][entry][span_mask[entry]].reshape((C, C))
+                span_stop = output['span_stop'][entry][span_mask[entry]].reshape((C, C))
+                span = dict()
+                for e in range(C):
+                    for c in range(C):
+                        if span_start[e, c] + span_stop[e, c] == 0:
+                            continue
+                        span[e].append((c, span_start[e, c], span_stop[e, c]))
+                pred['span'] = span
+                results.append(pred)
+
         return results
