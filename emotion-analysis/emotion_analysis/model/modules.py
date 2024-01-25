@@ -33,7 +33,7 @@ class PositionEmbeddings(nn.Module):
         # (S, H // 2) => (S, H)
         pos_embeddings = np.zeros((self.max_seq_len, self.hidden_dim))
         pos_embeddings[:, 0::2] = np.sin(e_term)
-        pos_embeddings[:, 1::2] = np.cos(e_term)
+        pos_embeddings[:, 1::2] = np.cos(e_term[:, :self.hidden_dim // 2])
         pos_embeddings = jnp.asarray(pos_embeddings)
 
         # Init & retrieve pos_embeddings from a variable collection
@@ -195,8 +195,81 @@ class TransformerClassifier(nn.Module):
         self,
         layer_in: Array,
         attn_mask: Array,
-        train: bool
+        train: bool,
     ) -> Dict[Literal['out', 'hidden'], Array]:
         hidden = self.transformer(layer_in, attn_mask, train)
         out = self.classifier(hidden)
         return { 'out': out, 'hidden': hidden }
+
+
+class EmotionCausality(nn.Module):
+    features: int=256
+    drop_p: float=0.2
+    max_seq_len: int=93
+    max_con_len: int=33
+    num_classes: int=2
+    activ_fn: Callable[[ArrayLike], Array] = gelu
+
+    def setup(self) -> None:
+        self.conv_features = nn.Conv(
+            features=self.features,
+            kernel_size=(3, 3),
+            padding='SAME',
+            strides=1,
+            kernel_init=nn.initializers.glorot_normal(),
+            bias_init=nn.initializers.zeros_init(),
+            use_bias=True,
+        )
+
+        self.conv_causality = nn.Conv(
+            features=self.num_classes,
+            kernel_size=(3, 3),
+            padding='SAME',
+            strides=1,
+            kernel_init=nn.initializers.glorot_normal(),
+            bias_init=nn.initializers.zeros_init(),
+            use_bias=True,
+        )
+
+        self.conv_span = nn.Conv(
+            features=self.max_seq_len,
+            kernel_size=(3, 3),
+            padding='SAME',
+            strides=1,
+            kernel_init=nn.initializers.glorot_normal(),
+            bias_init=nn.initializers.zeros_init(),
+            use_bias=True,
+        )
+
+        self.dropout = nn.Dropout(self.drop_p)
+
+    def __call__(
+        self,
+        *,
+        emotion_hidden: Array,
+        emotion_probs: Array,
+        cause_hidden: Array,
+        cause_probs: Array,
+        train: bool,
+    ) -> Dict[str, Array]:
+        # Create individual emotion-cause features
+        emotion = jnp.concatenate((emotion_probs, emotion_hidden), axis=2)
+        cause = jnp.concatenate((cause_probs, cause_hidden), axis=2)
+        
+        # Allocate joined emotion-cause table
+        batch_size = emotion.shape[0]
+        entry_size = emotion.shape[2] + cause.shape[2]
+        ec_table = jnp.zeros((batch_size, self.max_con_len, self.max_con_len, entry_size))
+
+        # Fill in joined emotion-cause table
+        for i in range(self.max_con_len):
+            for j in range(self.max_con_len):
+                ec_table.at[:, i, j, :].set(jnp.concatenate((emotion[:, i, :], cause[:, j, :]), axis=1))
+
+        # Apply convolutional layers
+        x = self.activ_fn(self.conv_features(self.dropout(ec_table, deterministic=not train)))
+        cause = self.conv_causality(x)
+        span = self.conv_span(x)
+
+        # Aggregate results
+        return { 'cause': cause, 'span': span }

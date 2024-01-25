@@ -1,12 +1,13 @@
-from typing import Callable, Dict, Literal, Tuple
+from typing import Callable, Dict, Literal, Tuple, Any
 
 import flax.linen as nn
 import jax.numpy as jnp
 from flax.linen.activation import relu
 from jax import Array
+from flax.linen.activation import softmax
 from jax.typing import ArrayLike
 
-from .modules import TransformerClassifier, TransformerEncoder
+from .modules import TransformerClassifier, EmotionCausality
 
 
 class EmotionCauseTextModel(nn.Module):
@@ -36,6 +37,10 @@ class EmotionCauseTextModel(nn.Module):
     activ_fn: Callable[[ArrayLike], Array]=relu
     # The maximum conversation length to be processed
     max_con_len: int=33
+    # The maximum utterance length to be processed
+    max_seq_len: int=93
+    # The features use in the final ec_table
+    ec_features: int=256
 
     def setup(self) -> None:
         """Model Architecture"""
@@ -54,11 +59,11 @@ class EmotionCauseTextModel(nn.Module):
         )
 
         self.classifier_cause = TransformerClassifier(
+            input_dim=self.input_dim + self.num_emotions,
             num_classes=self.num_causes,
             num_layers=self.num_layers,
             num_heads=self.num_heads,
             embed_dim=self.embed_dim,
-            input_dim=self.input_dim,
             dense_dim=self.dense_dim,
             drop_a=self.drop_a,
             drop_p=self.drop_p,
@@ -67,12 +72,13 @@ class EmotionCauseTextModel(nn.Module):
             max_con_len=self.max_con_len
         )
 
-        self.classifier = nn.Dense(
-            features=self.num_emotions,
-            kernel_init=nn.initializers.glorot_normal(),
-            bias_init=nn.initializers.zeros_init(),
-            name='classifier',
-            use_bias=True,
+        self.causality = EmotionCausality(
+            max_con_len=self.max_con_len,
+            max_seq_len=self.max_seq_len,
+            num_classes=self.num_causes,
+            features=self.ec_features,
+            activ_fn=self.activ_fn,
+            drop_p=self.drop_p,
         )
 
     def encode(
@@ -110,7 +116,7 @@ class EmotionCauseTextModel(nn.Module):
         uttr_attn_mask: Array,
         conv_attn_mask: Array,
         train: bool,
-    ) -> Dict[Literal['emotion', 'cause'], Dict[Literal['out', 'hidden'], Array]]:
+    ) -> Dict[str, Any]:
         """Classify utterances from a conversation into 7 emotion categories.
 
         Args:
@@ -121,14 +127,26 @@ class EmotionCauseTextModel(nn.Module):
             Array: An array of probabilities for each utterance of shape (B, C, S, E)
         """
         # Encode utterances individually: (B, C, S) -> (B, C, H)
-        x = self.encode(input_ids=input_ids, attn_mask=uttr_attn_mask, train=train)
+        utterance = self.encode(input_ids=input_ids, attn_mask=uttr_attn_mask, train=train)
 
         # Ignore padded conversations: (B, C) -> (B, 1, C, C)
         attn_mask = nn.make_attention_mask(conv_attn_mask, conv_attn_mask)
 
-        # Apply Transformers to determine cause and emotion for each utterance
-        emotion = self.classifier_emotion(x, attn_mask, train)
-        cause = self.classifier_cause(x, attn_mask, train)
+        # Apply a Transformer over the utterances to find out the emotions
+        emotion = self.classifier_emotion(utterance, attn_mask, train)
+
+        # Apply a Transformer over the utterances and predicted emotions to determine causality
+        effect = jnp.concatenate((softmax(emotion['out'], axis=-1), utterance), axis=-1)
+        cause = self.classifier_cause(effect, attn_mask, train)
+
+        # Obtain causality table
+        ec_table = self.causality(
+            emotion_hidden=emotion['hidden'],
+            emotion_probs=softmax(emotion['out'], axis=-1),
+            cause_hidden=cause['hidden'],
+            cause_probs=softmax(cause['out'], axis=-1),
+            train=train,
+        )
 
         # Logits
-        return { 'emotion': emotion, 'cause': cause }
+        return { 'emotion': emotion, 'cause': cause, 'ec_table': ec_table }

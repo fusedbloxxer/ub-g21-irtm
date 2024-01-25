@@ -80,7 +80,7 @@ class EmotionCauseEncoding(TypedDict):
     uttr_attn_mask: Array
 
     # Labels
-    cause_mask: NotRequired[Array]
+    span_mask: NotRequired[Array]
     cause_span: NotRequired[Array]
     cause_labels: NotRequired[Array]
     emotion_labels: NotRequired[Array]
