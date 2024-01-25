@@ -74,9 +74,21 @@ class TrainerModule(object):
         self.init_metrics()
 
     def init_metrics(self):
-        # Average Loss
+        # Mean Loss
         self.train_loss = MeanMetric()
         self.valid_loss = MeanMetric()
+
+        # Span Loss
+        self.train_loss_span = MeanMetric()
+        self.valid_loss_span = MeanMetric()
+
+        # Emotion Loss
+        self.train_loss_emotion = MeanMetric()
+        self.valid_loss_emotion = MeanMetric()
+
+        # Cause Loss
+        self.train_loss_cause = MeanMetric()
+        self.valid_loss_cause = MeanMetric()
 
         # F1Score for causes
         self.train_f1_cause = F1Metric('weighted')
@@ -116,6 +128,7 @@ class TrainerModule(object):
 
     def jit_func(self):
         def forward(
+            key: Any,
             state: ts.TrainState,
             batch: EmotionCauseEncoding,
         ):
@@ -124,7 +137,10 @@ class TrainerModule(object):
             data['input_ids'] = batch['input_ids']
             data['uttr_attn_mask'] = batch['uttr_attn_mask']
             data['conv_attn_mask'] = batch['conv_attn_mask']
-            output = state.apply_fn({ 'params': state.params }, **data, train=False)
+
+            # Forward pass
+            key, drop_key = jrm.split(key, 2)
+            output = state.apply_fn({ 'params': state.params }, **data, train=False, rngs={ 'dropout': drop_key })
 
             # Infer the emotion and whether it's a cause
             span_start = output['ec_table']['span_start'].argmax(axis=-1)
@@ -138,8 +154,9 @@ class TrainerModule(object):
                 'span_stop': span_stop,
                 'emotion': emotion_pred,
                 'cause': cause_pred,
+                'key': key,
             }
-        self.forward = jit(forward)
+        self.forward = forward
 
         def compute_loss(
             key: Any,
@@ -166,21 +183,30 @@ class TrainerModule(object):
             output = state.apply_fn({ 'params': params }, **data, train=train, rngs={ 'dropout': drop_key })
 
             # Compute span weight only TODO: move make_attn into transform (precumpute masks)
-            conv_attn_mask = nn.make_attention_mask(batch['conv_attn_mask'], batch['conv_attn_mask']).squeeze(axis=1)
-            span_start_loss = conv_attn_mask * cross_entropy(output['ec_table']['span_start'], batch['cause_span'][..., 0])
-            span_stop_loss = conv_attn_mask * cross_entropy(output['ec_table']['span_stop'], batch['cause_span'][..., 1])
+            span_mask = nn.make_attention_mask(batch['conv_attn_mask'], batch['conv_attn_mask']).squeeze(axis=1)
+            span_stop_loss = jnp.sum(span_mask * cross_entropy(output['ec_table']['span_stop'], batch['cause_span'][..., 1]))
+            span_start_loss = jnp.sum(span_mask * cross_entropy(output['ec_table']['span_start'], batch['cause_span'][..., 0]))
 
             # Padded Utterances * Imbalanced Weight
             weight_emotion = jnp.where(wloss, batch['emotion_weight'], jnp.ones_like(batch['emotion_weight']))
             weight_pad = batch['conv_attn_mask']
 
             # Compute losses
-            loss_emotion = cast(Array, cross_entropy(output['emotion']['out'], batch['emotion_labels']))
-            loss_cause = cast(Array, cross_entropy(output['cause']['out'], batch['cause_labels']))
-            loss_class = weight_pad * loss_cause + weight_pad * weight_emotion * loss_emotion
+            loss_emotion = jnp.sum(weight_pad * weight_emotion * cross_entropy(output['emotion']['out'], batch['emotion_labels']))
+            loss_cause = jnp.sum(weight_pad * cross_entropy(output['cause']['out'], batch['cause_labels']))
             loss_span = span_start_loss + span_stop_loss
-            loss = jnp.mean(loss_class) + jnp.mean(loss_span)
-            return loss, (output, key)
+
+            # Aggregate all losses
+            loss = loss_emotion + loss_cause + loss_span
+
+            # Aggregate additional results
+            return loss, {
+                'loss_emotion': loss_emotion,
+                'loss_cause': loss_cause,
+                'loss_span': loss_span,
+                'output': output,
+                'key': key,
+            }
 
         def train_step(
             key: Any,
@@ -192,14 +218,13 @@ class TrainerModule(object):
             loss_fn = lambda params: compute_loss(key, params, state, batch, True, wloss)
 
             # Compute loss & gradients
-            val, grads = value_and_grad(loss_fn, has_aux=True)(state.params)
-            loss, output, key = val[0], *val[1]
+            (loss, output), grads = value_and_grad(loss_fn, has_aux=True)(state.params)
 
             # Update the model and optimizers
             state = state.apply_gradients(grads=grads)
 
             # Return the new state
-            return loss, output, key, state
+            return loss, output, state
         self.train_step = jit(train_step)
 
         def eval_step(
@@ -212,11 +237,10 @@ class TrainerModule(object):
             loss_fn = lambda params: compute_loss(key, params, state, batch, False, wloss)
 
             # Compute loss & gradients
-            loss, aux = loss_fn(state.params)
-            output, key = aux[0], aux[1] 
+            loss, output = loss_fn(state.params)
 
             # Return the new state
-            return loss, output, key, state
+            return loss, output, state
         self.eval_step = jit(eval_step)
 
     def train_epoch(self, epoch: int, dataloader: DataLoader[EmotionCauseEncoding]) -> None:
@@ -227,19 +251,30 @@ class TrainerModule(object):
             conv_mask = batch['conv_attn_mask'].astype(bool)
 
             # Forward and backward pass for one batch
-            loss, output, self.key, self.state = self.train_step(self.key, self.state, batch, self.wloss)
+            loss, output, self.state = self.train_step(self.key, self.state, batch, self.wloss)
+
+            # Save new key
+            self.key = output['key']
+
+            # Track loss
             self.train_loss.update(loss)
+            self.train_loss_span.update(output['loss_span'])
+            self.train_loss_cause.update(output['loss_cause'])
+            self.train_loss_emotion.update(output['loss_emotion'])
 
             # Compute cause predictions
-            pred = output['cause']['out'][conv_mask, :].argmax(axis=1)
+            pred = output['output']['cause']['out'][conv_mask, :].argmax(axis=1)
             refs = batch['cause_labels'][conv_mask]
             self.train_f1_cause.update(predictions=pred, references=refs)
 
             # Compute emotion predictions
-            pred = output['emotion']['out'][conv_mask, :].argmax(axis=1)
+            pred = output['output']['emotion']['out'][conv_mask, :].argmax(axis=1)
             refs = batch['emotion_labels'][conv_mask]
             self.train_f1_emotion.update(predictions=pred, references=refs)
         mlflow.log_metric(key='train_loss', value=self.train_loss.compute(), step=epoch)
+        mlflow.log_metric(key='train_loss_span', value=self.train_loss_span.compute(), step=epoch)
+        mlflow.log_metric(key='train_loss_cause', value=self.train_loss_cause.compute(), step=epoch)
+        mlflow.log_metric(key='train_loss_emotion', value=self.train_loss_emotion.compute(), step=epoch)
         mlflow.log_metric(key='train_f1_cause', value=self.train_f1_cause.compute(), step=epoch)
         mlflow.log_metric(key='train_f1_emotion', value=self.train_f1_emotion.compute(), step=epoch)
 
@@ -251,19 +286,30 @@ class TrainerModule(object):
             conv_mask = batch['conv_attn_mask'].astype(bool)
 
             # Forward pass for one batch
-            loss, output, self.key, _ = self.eval_step(self.key, self.state, batch, self.wloss)
+            loss, output, _ = self.eval_step(self.key, self.state, batch, self.wloss)
+
+            # Save new key
+            self.key = output['key']
+
+            # Track loss
             self.valid_loss.update(loss)
+            self.valid_loss_span.update(output['loss_span'])
+            self.valid_loss_cause.update(output['loss_cause'])
+            self.valid_loss_emotion.update(output['loss_emotion'])
 
             # Compute cause predictions
-            pred = output['cause']['out'][conv_mask, :].argmax(axis=1)
+            pred = output['output']['cause']['out'][conv_mask, :].argmax(axis=1)
             refs = batch['cause_labels'][conv_mask]
             self.valid_f1_cause.update(predictions=pred, references=refs)
 
             # Compute emotion predictions
-            pred = output['emotion']['out'][conv_mask, :].argmax(axis=1)
+            pred = output['output']['emotion']['out'][conv_mask, :].argmax(axis=1)
             refs = batch['emotion_labels'][conv_mask]
             self.valid_f1_emotion.update(predictions=pred, references=refs)
         mlflow.log_metric(key='valid_loss', value=self.valid_loss.compute(), step=epoch)
+        mlflow.log_metric(key='valid_loss_span', value=self.valid_loss_span.compute(), step=epoch)
+        mlflow.log_metric(key='valid_loss_cause', value=self.valid_loss_cause.compute(), step=epoch)
+        mlflow.log_metric(key='valid_loss_emotion', value=self.valid_loss_emotion.compute(), step=epoch)
         mlflow.log_metric(key='valid_f1_cause', value=self.valid_f1_cause.compute(), step=epoch)
         mlflow.log_metric(key='valid_f1_emotion', value=self.valid_f1_emotion.compute(), step=epoch)
 
@@ -292,23 +338,32 @@ class TrainerModule(object):
 
         for batch in tqdm(dataloader, desc='inference'):
             # Perform inference
-            output = self.forward(self.state, batch)
+            output = self.forward(self.key, self.state, batch)
             span_mask = nn.make_attention_mask(batch['conv_attn_mask'], batch['conv_attn_mask']).squeeze(1).astype(bool)
+            span_mask = np.sqrt(span_mask.sum(axis=(1, 2))).astype(int)
+            self.key = output['key']
 
             for entry in range(batch['input_ids'].shape[0]):
                 pred = {}
+                # Labels
                 pred['emotion'] = output['emotion'][entry, batch['conv_attn_mask'][entry].astype(bool)]
                 pred['cause'] = output['cause'][entry, batch['conv_attn_mask'][entry].astype(bool)]
-                C = np.sqrt(output['span_start'][entry][span_mask[entry]].shape[0]).astype(int)
-                span_start = output['span_start'][entry][span_mask[entry]].reshape((C, C))
-                span_stop = output['span_stop'][entry][span_mask[entry]].reshape((C, C))
-                span = dict()
+                
+                # Span
+                C = span_mask[entry]
+                span_stop = output['span_stop'][entry][:C, :C]
+                span_start = output['span_start'][entry][:C, :C]
+
+                # Collect causes
+                span = defaultdict(list)
                 for e in range(C):
                     for c in range(C):
                         if span_start[e, c] + span_stop[e, c] == 0:
                             continue
                         span[e].append((c, span_start[e, c], span_stop[e, c]))
                 pred['span'] = span
+
+                # Track
                 results.append(pred)
 
         return results

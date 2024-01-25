@@ -255,16 +255,18 @@ class EmotionCausality(nn.Module):
         # Create individual emotion-cause features
         emotion = jnp.concatenate((emotion_probs, emotion_hidden), axis=2)
         cause = jnp.concatenate((cause_probs, cause_hidden), axis=2)
-        
+
         # Allocate joined emotion-cause table
         batch_size = emotion.shape[0]
-        entry_size = emotion.shape[2] + cause.shape[2]
-        ec_table = jnp.zeros((batch_size, self.max_con_len, self.max_con_len, entry_size))
+        ec_table = []
 
         # Fill in joined emotion-cause table
         for i in range(self.max_con_len):
             for j in range(self.max_con_len):
-                ec_table.at[:, i, j, :].set(jnp.concatenate((emotion[:, i, :], cause[:, j, :]), axis=1))
+                ec_table.append(jnp.concatenate((emotion[:, i, :], cause[:, j, :]), axis=1))
+
+        # Reshape
+        ec_table = jnp.array(ec_table).reshape((batch_size, self.max_con_len, self.max_con_len, -1))
 
         # Apply convolutional layers
         x = self.activ_fn(self.conv_features(self.dropout(ec_table, deterministic=not train)))
