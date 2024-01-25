@@ -3,12 +3,12 @@ subtask: "1"
 
 # Training
 seed: 33
-batch_size: 2
+batch_size: 32
 num_workers: 0
 prefetch_factor: null
 
 # Model settings
-learning_rate: !!float 1e-4
+learning_rate: !!float 9e-5
 finetune: head
 
 # Pretrained Model

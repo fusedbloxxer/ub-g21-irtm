@@ -255,7 +255,7 @@ class EmotionCausality(nn.Module):
         # Create individual emotion-cause features
         emotion = jnp.concatenate((emotion_probs, emotion_hidden), axis=2)
         cause = jnp.concatenate((cause_probs, cause_hidden), axis=2)
-
+        
         # Allocate joined emotion-cause table
         batch_size = emotion.shape[0]
         ec_table = []

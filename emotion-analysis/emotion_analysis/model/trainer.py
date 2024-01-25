@@ -156,7 +156,7 @@ class TrainerModule(object):
                 'cause': cause_pred,
                 'key': key,
             }
-        self.forward = forward
+        self.forward = jit(forward)
 
         def compute_loss(
             key: Any,
@@ -182,18 +182,25 @@ class TrainerModule(object):
             key, drop_key = jrm.split(key, 2)
             output = state.apply_fn({ 'params': params }, **data, train=train, rngs={ 'dropout': drop_key })
 
-            # Compute span weight only TODO: move make_attn into transform (precumpute masks)
-            span_mask = nn.make_attention_mask(batch['conv_attn_mask'], batch['conv_attn_mask']).squeeze(axis=1)
-            span_stop_loss = jnp.sum(span_mask * cross_entropy(output['ec_table']['span_stop'], batch['cause_span'][..., 1]))
-            span_start_loss = jnp.sum(span_mask * cross_entropy(output['ec_table']['span_start'], batch['cause_span'][..., 0]))
+            # Compute span masks
+            pad_mask = nn.make_attention_mask(batch['conv_attn_mask'], batch['conv_attn_mask']).squeeze(axis=1)
+            weight_mask = (0.75 * batch['span_mask'] + 0.25 * (1 - batch['span_mask']))
+
+            # Compute span losses
+            span_start_loss = cross_entropy(output['ec_table']['span_start'], batch['cause_span'][..., 0])
+            span_stop_loss = cross_entropy(output['ec_table']['span_stop'], batch['cause_span'][..., 1])
+
+            # Weigh them
+            span_start_loss = jnp.sum(pad_mask * weight_mask * span_start_loss)
+            span_stop_loss = jnp.sum(pad_mask * weight_mask * span_stop_loss) 
 
             # Padded Utterances * Imbalanced Weight
             weight_emotion = jnp.where(wloss, batch['emotion_weight'], jnp.ones_like(batch['emotion_weight']))
-            weight_pad = batch['conv_attn_mask']
+            pad_mask = batch['conv_attn_mask']
 
             # Compute losses
-            loss_emotion = jnp.sum(weight_pad * weight_emotion * cross_entropy(output['emotion']['out'], batch['emotion_labels']))
-            loss_cause = jnp.sum(weight_pad * cross_entropy(output['cause']['out'], batch['cause_labels']))
+            loss_emotion = jnp.sum(pad_mask * weight_emotion * cross_entropy(output['emotion']['out'], batch['emotion_labels']))
+            loss_cause = jnp.sum(pad_mask * cross_entropy(output['cause']['out'], batch['cause_labels']))
             loss_span = span_start_loss + span_stop_loss
 
             # Aggregate all losses
@@ -365,5 +372,4 @@ class TrainerModule(object):
 
                 # Track
                 results.append(pred)
-
         return results
