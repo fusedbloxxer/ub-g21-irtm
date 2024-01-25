@@ -122,6 +122,7 @@ class TrainerModule(object):
             wloss: bool,
         ):
             # Ensure all labels are present
+            assert 'cause_span' in batch, 'missing cause_span'
             assert 'emotion_weight' in batch, 'missing emotion weights'
             assert 'span_mask' in batch and 'cause_span' in batch, 'missing cause_span or span_mask'
             assert 'cause_labels' in batch and 'emotion_labels' in batch, 'missing emotion or cause labels'
@@ -136,6 +137,13 @@ class TrainerModule(object):
             key, drop_key = jrm.split(key, 2)
             output = state.apply_fn({ 'params': params }, **data, train=train, rngs={ 'dropout': drop_key })
 
+            # Ignore padded conversations: (B, C) -> (B, C, C)
+            conv_attn_mask = nn.make_attention_mask(batch['conv_attn_mask'], batch['conv_attn_mask']).squeeze(axis=1)
+
+            # Compute span weight only
+            span_start_loss = conv_attn_mask * cross_entropy(output['ec_table']['span_start'], batch['cause_span'][..., 0])
+            span_stop_loss = conv_attn_mask * cross_entropy(output['ec_table']['span_stop'], batch['cause_span'][..., 1])
+
             # Padded Utterances * Imbalanced Weight
             weight_emotion = jnp.where(wloss, batch['emotion_weight'], jnp.ones_like(batch['emotion_weight']))
             weight_pad = batch['conv_attn_mask']
@@ -143,8 +151,9 @@ class TrainerModule(object):
             # Compute losses
             loss_emotion = cast(Array, cross_entropy(output['emotion']['out'], batch['emotion_labels']))
             loss_cause = cast(Array, cross_entropy(output['cause']['out'], batch['cause_labels']))
-            loss = weight_pad * loss_cause + weight_pad * weight_emotion * loss_emotion
-            loss = jnp.mean(loss)
+            loss_class = weight_pad * loss_cause + weight_pad * weight_emotion * loss_emotion
+            loss_span = span_start_loss + span_stop_loss
+            loss = jnp.mean(loss_class) + jnp.mean(loss_span)
             return loss, (output, key)
 
         def train_step(

@@ -20,7 +20,7 @@ class EmotionCauseTextModel(nn.Module):
     # The number of Transformer layers
     num_layers: int=2
     # The number of attention heads in each layer
-    num_heads: int=4
+    num_heads: int=3
     # The embedding dim used per AttentionHead
     embed_dim: int=768
     # The input dim that a Transformer layer receives
@@ -28,7 +28,7 @@ class EmotionCauseTextModel(nn.Module):
     # The hidden dim of the inner MLP layer
     dense_dim: int=768
     # The dropout rate used in attention heads
-    drop_a: float=0.2
+    drop_a: float=0.1
     # The dropout rate used in-between layers
     drop_p: float=0.2
     # The eps value used by normalization layers
@@ -40,7 +40,7 @@ class EmotionCauseTextModel(nn.Module):
     # The maximum utterance length to be processed
     max_seq_len: int=93
     # The features use in the final ec_table
-    ec_features: int=256
+    ec_features: int=128
 
     def setup(self) -> None:
         """Model Architecture"""

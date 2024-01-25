@@ -142,8 +142,8 @@ class EncodeTransform(Transform[EmotionCauseConversation, EmotionCauseEncoding])
                     eoc_matrix[utterance][cause] = eoc_index
 
             # Concatenate them
-            span_matrix = np.stack((boc_matrix, eoc_matrix), axis=0)
-            data['span_mask'] = jnp.asarray(span_matrix != 0, np.float32)
+            span_matrix = np.stack((boc_matrix, eoc_matrix), axis=-1)
+            data['span_mask'] = jnp.asarray(span_matrix.sum(axis=-1) != 0, np.int32) # todo attention to this! maybe it starts at zero => issue
             data['cause_span'] = jnp.asarray(span_matrix, np.int32)
         return cast(EmotionCauseEncoding, data)
 

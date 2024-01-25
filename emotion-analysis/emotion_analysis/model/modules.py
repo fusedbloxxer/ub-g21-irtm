@@ -221,8 +221,8 @@ class EmotionCausality(nn.Module):
             use_bias=True,
         )
 
-        self.conv_causality = nn.Conv(
-            features=self.num_classes,
+        self.conv_span_start = nn.Conv(
+            features=self.max_seq_len,
             kernel_size=(3, 3),
             padding='SAME',
             strides=1,
@@ -231,7 +231,7 @@ class EmotionCausality(nn.Module):
             use_bias=True,
         )
 
-        self.conv_span = nn.Conv(
+        self.conv_span_stop = nn.Conv(
             features=self.max_seq_len,
             kernel_size=(3, 3),
             padding='SAME',
@@ -268,8 +268,8 @@ class EmotionCausality(nn.Module):
 
         # Apply convolutional layers
         x = self.activ_fn(self.conv_features(self.dropout(ec_table, deterministic=not train)))
-        cause = self.conv_causality(x)
-        span = self.conv_span(x)
+        span_start = self.conv_span_start(x)
+        span_stop = self.conv_span_stop(x)
 
         # Aggregate results
-        return { 'cause': cause, 'span': span }
+        return { 'span_start': span_start, 'span_stop': span_stop }
