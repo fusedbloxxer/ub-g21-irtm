@@ -113,6 +113,32 @@ class TrainerModule(object):
         )
 
     def jit_func(self):
+        def forward(
+            state: ts.TrainState,
+            batch: EmotionCauseEncoding,
+        ):
+            # Data Input
+            data: Dict[str, Array] = {}
+            data['input_ids'] = batch['input_ids']
+            data['uttr_attn_mask'] = batch['uttr_attn_mask']
+            data['conv_attn_mask'] = batch['conv_attn_mask']
+            output = state.apply_fn({ 'params': state.params }, **data, train=False)
+
+            # Infer the emotion and whether it's a cause
+            span_start = output['ec_table']['span_start'].argmax(axis=-1)
+            span_stop = output['ec_table']['span_stop'].argmax(axis=-1)
+            emotion_pred = output['emotion']['out'].argmax(axis=-1)
+            cause_pred = output['cause']['out'].argmax(axis=-1)
+
+            # Return predicted labels
+            return {
+                'span_start': span_start,
+                'span_stop': span_stop,
+                'emotion': emotion_pred,
+                'cause': cause_pred,
+            }
+        self.forward = jit(forward)
+
         def compute_loss(
             key: Any,
             params: FrozenDict,
@@ -137,10 +163,8 @@ class TrainerModule(object):
             key, drop_key = jrm.split(key, 2)
             output = state.apply_fn({ 'params': params }, **data, train=train, rngs={ 'dropout': drop_key })
 
-            # Ignore padded conversations: (B, C) -> (B, C, C)
-            conv_attn_mask = nn.make_attention_mask(batch['conv_attn_mask'], batch['conv_attn_mask']).squeeze(axis=1)
-
             # Compute span weight only
+            conv_attn_mask = nn.make_attention_mask(batch['conv_attn_mask'], batch['conv_attn_mask']).squeeze(axis=1)
             span_start_loss = conv_attn_mask * cross_entropy(output['ec_table']['span_start'], batch['cause_span'][..., 0])
             span_stop_loss = conv_attn_mask * cross_entropy(output['ec_table']['span_stop'], batch['cause_span'][..., 1])
 
@@ -257,3 +281,13 @@ class TrainerModule(object):
             for epoch in trange(num_epochs, desc='[training]'):
                 self.train_epoch(epoch, train_dataloader)
                 self.valid_epoch(epoch, valid_dataloader)
+
+    def predict(
+        self,
+        dataloader,
+    ):
+        results = []
+        for batch in tqdm(dataloader, desc='inference'):
+            output = self.forward(self.state, batch)
+            results.append(output)
+        return results
