@@ -285,11 +285,11 @@ class TrainerModule(object):
         mlflow.log_metric(key='train_f1_cause', value=self.train_f1_cause.compute(), step=epoch)
         mlflow.log_metric(key='train_f1_emotion', value=self.train_f1_emotion.compute(), step=epoch)
 
-    def valid_epoch(self, epoch: int, dataloader: DataLoader[EmotionCauseEncoding]) -> None:
-        for batch in tqdm(dataloader, desc=f'[eval]'):
+    def eval_epoch(self, epoch: int, dataloader: DataLoader[EmotionCauseEncoding], split: str = 'valid') -> None:
+        for batch in tqdm(dataloader, desc=f'[{split}]'):
             batch: EmotionCauseEncoding
-            assert 'cause_labels' in batch, 'no cause labels were found during validation'
-            assert 'emotion_labels' in batch, 'no emotion labels were found during validation'
+            assert 'cause_labels' in batch, f'no cause labels were found during {split}'
+            assert 'emotion_labels' in batch, f'no emotion labels were found during {split}'
             conv_mask = batch['conv_attn_mask'].astype(bool)
 
             # Forward pass for one batch
@@ -313,18 +313,19 @@ class TrainerModule(object):
             pred = output['output']['emotion']['out'][conv_mask, :].argmax(axis=1)
             refs = batch['emotion_labels'][conv_mask]
             self.valid_f1_emotion.update(predictions=pred, references=refs)
-        mlflow.log_metric(key='valid_loss', value=self.valid_loss.compute(), step=epoch)
-        mlflow.log_metric(key='valid_loss_span', value=self.valid_loss_span.compute(), step=epoch)
-        mlflow.log_metric(key='valid_loss_cause', value=self.valid_loss_cause.compute(), step=epoch)
-        mlflow.log_metric(key='valid_loss_emotion', value=self.valid_loss_emotion.compute(), step=epoch)
-        mlflow.log_metric(key='valid_f1_cause', value=self.valid_f1_cause.compute(), step=epoch)
-        mlflow.log_metric(key='valid_f1_emotion', value=self.valid_f1_emotion.compute(), step=epoch)
+        mlflow.log_metric(key=f'{split}_loss', value=self.valid_loss.compute(), step=epoch)
+        mlflow.log_metric(key=f'{split}_loss_span', value=self.valid_loss_span.compute(), step=epoch)
+        mlflow.log_metric(key=f'{split}_loss_cause', value=self.valid_loss_cause.compute(), step=epoch)
+        mlflow.log_metric(key=f'{split}_loss_emotion', value=self.valid_loss_emotion.compute(), step=epoch)
+        mlflow.log_metric(key=f'{split}_f1_cause', value=self.valid_f1_cause.compute(), step=epoch)
+        mlflow.log_metric(key=f'{split}_f1_emotion', value=self.valid_f1_emotion.compute(), step=epoch)
 
     def train(
         self,
         *,
         train_dataloader: DataLoader[EmotionCauseEncoding],
         valid_dataloader: DataLoader[EmotionCauseEncoding],
+        test_dataloader: DataLoader[EmotionCauseEncoding],
         tags: Dict[str, Any] = {},
         num_epochs: int = 10,
     ) -> None:
@@ -335,7 +336,8 @@ class TrainerModule(object):
             # Perform train & valid at each step
             for epoch in trange(num_epochs, desc='[training]'):
                 self.train_epoch(epoch, train_dataloader)
-                self.valid_epoch(epoch, valid_dataloader)
+                self.eval_epoch(epoch, valid_dataloader, split='valid')
+                self.eval_epoch(epoch, test_dataloader, split='test')
 
     def predict(
         self,

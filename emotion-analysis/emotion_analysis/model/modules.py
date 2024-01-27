@@ -204,10 +204,8 @@ class TransformerClassifier(nn.Module):
 
 class EmotionCausality(nn.Module):
     features: int=256
-    drop_p: float=0.2
+    drop_p: float=0.
     max_seq_len: int=93
-    max_con_len: int=33
-    num_classes: int=2
     activ_fn: Callable[[ArrayLike], Array] = gelu
 
     def setup(self) -> None:
@@ -250,28 +248,32 @@ class EmotionCausality(nn.Module):
         emotion_probs: Array,
         cause_hidden: Array,
         cause_probs: Array,
+        attn_mask: Array,
         train: bool,
     ) -> Dict[str, Array]:
         # Create individual emotion-cause features
         emotion = jnp.concatenate((emotion_probs, emotion_hidden), axis=2)
         cause = jnp.concatenate((cause_probs, cause_hidden), axis=2)
-        
+
         # Allocate joined emotion-cause table
         batch_size = emotion.shape[0]
-        ec_table = []
+        conv_size = emotion.shape[1]
+        ec_pairs = []
 
         # Fill in joined emotion-cause table
-        for i in range(self.max_con_len):
-            for j in range(self.max_con_len):
-                ec_table.append(jnp.concatenate((emotion[:, i, :], cause[:, j, :]), axis=1))
-
-        # Reshape
-        ec_table = jnp.array(ec_table).reshape((batch_size, self.max_con_len, self.max_con_len, -1))
+        for i in range(conv_size):
+            for j in range(conv_size):
+                ec_pairs.append(jnp.concatenate((emotion[:, i, :], cause[:, j, :]), axis=1))
 
         # Apply convolutional layers
-        x = self.activ_fn(self.conv_features(self.dropout(ec_table, deterministic=not train)))
-        span_start = self.conv_span_start(x)
-        span_stop = self.conv_span_stop(x)
+        ec_pairs = attn_mask * jnp.array(ec_pairs).reshape((batch_size, conv_size, conv_size, -1))
+        x = self.dropout(ec_pairs, deterministic=not train)
+        x = attn_mask * self.activ_fn(self.conv_features(x))
+        span_start = attn_mask * self.conv_span_start(x)
+        span_stop = attn_mask * self.conv_span_stop(x)
 
         # Aggregate results
-        return { 'span_start': span_start, 'span_stop': span_stop }
+        return {
+            'span_start': span_start,
+            'span_stop': span_stop,
+        }

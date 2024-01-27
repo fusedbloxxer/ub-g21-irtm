@@ -1,13 +1,12 @@
-from typing import Callable, Dict, Literal, Tuple, Any
+from typing import Any, Callable, Dict, Literal, Tuple
 
 import flax.linen as nn
 import jax.numpy as jnp
-from flax.linen.activation import relu
+from flax.linen.activation import gelu, softmax
 from jax import Array
-from flax.linen.activation import softmax
 from jax.typing import ArrayLike
 
-from .modules import TransformerClassifier, EmotionCausality
+from .modules import EmotionCausality, TransformerClassifier
 
 
 class EmotionCauseTextModel(nn.Module):
@@ -28,13 +27,13 @@ class EmotionCauseTextModel(nn.Module):
     # The hidden dim of the inner MLP layer
     dense_dim: int=768
     # The dropout rate used in attention heads
-    drop_a: float=0.1
+    drop_a: float=0.0
     # The dropout rate used in-between layers
-    drop_p: float=0.2
+    drop_p: float=0.0
     # The eps value used by normalization layers
     norm_eps: float=1e-6
     # The activation function used in MLP layers
-    activ_fn: Callable[[ArrayLike], Array]=relu
+    activ_fn: Callable[[ArrayLike], Array]=gelu
     # The maximum conversation length to be processed
     max_con_len: int=33
     # The maximum utterance length to be processed
@@ -46,6 +45,7 @@ class EmotionCauseTextModel(nn.Module):
         """Model Architecture"""
         self.classifier_emotion = TransformerClassifier(
             num_classes=self.num_emotions,
+            max_con_len=self.max_con_len,
             num_layers=self.num_layers,
             num_heads=self.num_heads,
             embed_dim=self.embed_dim,
@@ -55,11 +55,11 @@ class EmotionCauseTextModel(nn.Module):
             drop_p=self.drop_p,
             norm_eps=self.norm_eps,
             activ_fn=self.activ_fn,
-            max_con_len=self.max_con_len,
         )
 
         self.classifier_cause = TransformerClassifier(
             input_dim=self.input_dim + self.num_emotions,
+            max_con_len=self.max_con_len,
             num_classes=self.num_causes,
             num_layers=self.num_layers,
             num_heads=self.num_heads,
@@ -69,13 +69,10 @@ class EmotionCauseTextModel(nn.Module):
             drop_p=self.drop_p,
             norm_eps=self.norm_eps,
             activ_fn=self.activ_fn,
-            max_con_len=self.max_con_len
         )
 
         self.causality = EmotionCausality(
-            max_con_len=self.max_con_len,
             max_seq_len=self.max_seq_len,
-            num_classes=self.num_causes,
             features=self.ec_features,
             activ_fn=self.activ_fn,
             drop_p=self.drop_p,
@@ -132,10 +129,8 @@ class EmotionCauseTextModel(nn.Module):
         # Ignore padded conversations: (B, C) -> (B, 1, C, C)
         attn_mask = nn.make_attention_mask(conv_attn_mask, conv_attn_mask)
 
-        # Apply a Transformer over the utterances to find out the emotions
+        # Apply a Transformer over the utterances and use predicted emotions to determine causality
         emotion = self.classifier_emotion(utterance, attn_mask, train)
-
-        # Apply a Transformer over the utterances and predicted emotions to determine causality
         effect = jnp.concatenate((softmax(emotion['out'], axis=-1), utterance), axis=-1)
         cause = self.classifier_cause(effect, attn_mask, train)
 
@@ -145,6 +140,7 @@ class EmotionCauseTextModel(nn.Module):
             emotion_probs=softmax(emotion['out'], axis=-1),
             cause_hidden=cause['hidden'],
             cause_probs=softmax(cause['out'], axis=-1),
+            attn_mask=jnp.moveaxis(attn_mask, 1, 3),
             train=train,
         )
 

@@ -8,7 +8,7 @@ num_workers: 0
 prefetch_factor: null
 
 # Model settings
-learning_rate: !!float 9e-5
+learning_rate: !!float 2e-4
 finetune: head
 
 # Pretrained Model
